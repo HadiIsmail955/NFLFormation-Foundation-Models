@@ -5,12 +5,13 @@ from tqdm import tqdm
 merged_coco_path = "_annotations_all.coco.json"
 images_dir = "images"
 output_json = "_annotations_roles.coco.json"
-source_file = r"..\Football Jersey Tracker.v1i.coco\merged_dataset"
+source_file = r"..\\Football Jersey Tracker.v1i.coco\\merged_dataset"
 labeled_dir = os.path.join(source_file, "labeled_images")
 os.makedirs(labeled_dir, exist_ok=True)
 
 blur_unknown = True
-UNBLUR_KEY = ord("u")  # Press 'U' to save unblurred
+UNBLUR_KEY = ord("u")   # Save unblurred
+FLIP_KEY = ord("f")     # Flip horizontally
 
 # === KEY MAPPING ===
 ATTACK_FIRST_KEY = ord("a")
@@ -36,12 +37,32 @@ with open(os.path.join(source_file, merged_coco_path), "r") as f:
 annotations = coco["annotations"]
 images = coco["images"]
 
-# build annotation index
+# Build annotation index
 anns_by_image = {}
 for ann in annotations:
     anns_by_image.setdefault(ann["image_id"], []).append(ann)
 
-print("🎯 Starting Visual Labeling Tool with Save & Unblur Option")
+print("🎯 Football Labeling Tool — with MIRROR FLIP (horizontal) support")
+
+def draw_boxes(base_img, anns):
+    img_out = base_img.copy()
+    for ann in anns:
+        x, y, w, h = map(int, ann["bbox"])
+        cat = ann["category_id"]
+        color = (0,255,0) if cat==1 else (255,0,0) if cat==3 else (128,128,128)
+        cv2.rectangle(img_out, (x, y), (x+w, y+h), color, 2)
+        cv2.putText(img_out, f"cat:{cat}", (x, y-5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+    return img_out
+
+def flip_bboxes_horizontally(anns, img_width):
+    """Flip bounding boxes horizontally across image center."""
+    new_anns = []
+    for ann in anns:
+        x, y, w, h = ann["bbox"]
+        new_x = img_width - x - w
+        ann["bbox"] = [int(new_x), int(y), int(w), int(h)]
+        new_anns.append(ann)
+    return new_anns
 
 updated_images = []
 
@@ -55,72 +76,52 @@ for img in tqdm(images):
     if original_image is None:
         continue
 
-    # Prepare display and save images
-    display_image = original_image.copy()  # for showing bounding boxes
-    save_image = original_image.copy()     # for saving (blurred or unblurred)
-    
-    # Pre-blur unknown/referee for display and save_image
+    H, W = original_image.shape[:2]
+    display_image = original_image.copy()
+    save_image = original_image.copy()
+
+    # Blur unknown/referee
     if blur_unknown:
         for ann in anns:
             x, y, w, h = map(int, ann["bbox"])
-            cat = ann["category_id"]
-            if cat not in [1, 3]:  # unknown/referee
+            if ann["category_id"] not in [1,3]:
                 roi = save_image[y:y+h, x:x+w]
                 save_image[y:y+h, x:x+w] = cv2.GaussianBlur(roi, (23,23), 30)
-    
-    # Draw bounding boxes only for display
-    for ann in anns:
-        x, y, w, h = map(int, ann["bbox"])
-        cat = ann["category_id"]
-        if cat == 1:
-            color = (0, 255, 0)
-        elif cat == 3:
-            color = (255, 0, 0)
-        else:
-            color = (128, 128, 128)
-        cv2.rectangle(display_image, (x, y), (x + w, y + h), color, 2)
-        cv2.putText(display_image, f"cat:{cat}", (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
 
+    display_image = draw_boxes(display_image, anns)
+
+    flipped = False
     attack_cat, defense_cat, formation = None, None, None
     confirmed = False
     unblur = False
 
     while True:
         disp = display_image.copy()
-
-        # Overlay instructions
         y0 = 25
         instructions = [
             "A: attack first | D: defense first",
-            "1–7: select formation | S: skip | Q: quit | U: unblur save",
-            "Unknown/referee are gray (blurred by default)"
+            "1–7: formation | F: flip horizontally | U: unblur",
+            "S: skip | Q: quit | Enter: confirm"
         ]
         for line in instructions:
             cv2.putText(disp, line, (10, y0), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255,255,255), 2)
             y0 += 30
 
-        # Overlay formation options
-        y_form = y0
-        cv2.putText(disp, "Formations:", (10, y_form), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,255,255), 2)
-        y_form += 30
-        for k, v in formations.items():
-            text = f"{chr(k)}: {v}"
-            cv2.putText(disp, text, (20, y_form), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (200,200,0), 2)
-            y_form += 25
+        cv2.putText(disp, f"Flipped: {'Yes' if flipped else 'No'}",
+                    (10, y0), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,255,255), 2)
 
-        # Show current selection
         status = f"Attack: {attack_cat or '-'} | Defense: {defense_cat or '-'} | Formation: {formation or '-'}"
-        cv2.putText(disp, status, (10, y_form + 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,255,255), 2)
+        cv2.putText(disp, status, (10, y0+40), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,255,255), 2)
 
         cv2.imshow("Football Labeling Tool", disp)
         key = cv2.waitKey(0)
 
         if key == QUIT_KEY:
-            print("🛑 Exiting early.")
+            print("🛑 Exiting tool.")
             cv2.destroyAllWindows()
             exit()
         elif key == SKIP_KEY:
-            print("⏭️ Skipping image.")
+            print("⏭️ Skipped image.")
             break
         elif key == ATTACK_FIRST_KEY:
             attack_cat, defense_cat = 1, 3
@@ -130,36 +131,44 @@ for img in tqdm(images):
             print("🛡️ Defense team = category 1, Attack = category 3")
         elif key in formations:
             formation = formations[key]
-            print(f"📋 Formation selected: {formation}")
+            print(f"📋 Formation: {formation}")
+        elif key == UNBLUR_KEY:
+            unblur = True
+            print("🔓 Unblur activated.")
+        elif key == FLIP_KEY:
+            print("🔁 Flipping image horizontally...")
+            display_image = cv2.flip(display_image, 1)
+            save_image = cv2.flip(save_image, 1)
+            original_image = cv2.flip(original_image, 1)
+            anns = flip_bboxes_horizontally(anns, W)
+            display_image = draw_boxes(display_image, anns)
+            flipped = not flipped
         elif key in CONFIRM_KEYS:
             if attack_cat and formation:
                 confirmed = True
                 break
             else:
-                print("❗ Please select team roles and formation before confirming.")
-        elif key == UNBLUR_KEY:
-            unblur = True
-            print("🔓 Unblur activated for saving this image")
+                print("❗ Please select attack/defense and formation first.")
 
     if confirmed:
         img["attributes"] = {
             "formation": formation,
             "attack_team_category": attack_cat,
-            "defense_team_category": defense_cat
+            "defense_team_category": defense_cat,
+            "flipped": flipped
         }
         updated_images.append(img)
 
-        # Save labeled image
-        save_final = original_image.copy() if unblur else save_image
+        final_img = original_image.copy() if unblur else save_image
         save_path = os.path.join(labeled_dir, img["file_name"])
-        cv2.imwrite(save_path, save_final)
+        cv2.imwrite(save_path, final_img)
 
 cv2.destroyAllWindows()
 
-# Save updated COCO
+# Save final JSON
 coco["images"] = updated_images
 with open(os.path.join(source_file, output_json), "w") as f:
     json.dump(coco, f, indent=2)
 
-print(f"\n✅ Saved labeled dataset with roles and formations to: {output_json}")
+print(f"\n✅ Saved dataset with mirror-flip bounding boxes → {output_json}")
 print(f"✅ Labeled images saved to: {labeled_dir}")

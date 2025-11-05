@@ -16,7 +16,7 @@ The second stage is merging the picked images and anotations of the 3 phases in 
 ### Second step 
 Running classify_image_roles.py
 ### description
-the code allow user to classify the team with the atack possition and diffence possition and give the formate of offnsive team, as well blur ref and unknown player in image and can be unblured.
+the code allow user to classify the team with the atack possition and diffence possition and give the formate of offnsive team, as well blur ref and unknown player in image and can be unblured, we are able to place the offnsiveside olways on one side by flipping image horizontally.
 aproched:
 pick the bbox of catigory 1 if atack or defense and the catigory 3 will be the oppsite automaticly:
 ATTACK_FIRST_KEY => "a"
@@ -34,6 +34,9 @@ picking formation by key number:
 after that confirm information by 
 CONFIRM_KEYS => Enter or Space
 
+Flip image 
+FLIP_KEY => "f" # Flip horizontally
+
 other options:
 UNBLUR_KEY => "u" # to save unblurred
 SKIP_KEY => "s"
@@ -48,6 +51,6 @@ It uses SAM and make use of bbox to segment the player.
 Run review_and_resegment.py
 ### description
 It can allow user to edit segmentation of images if found any unproper segmentation:
-KEEP_KEY=> "k" # keep
-RESEG_KEY=> "r" # resegment
-QUIT_KEY=> "q" # quit
+KEEP_KEY => "k" # keep
+RESEG_KEY => "r" # resegment
+QUIT_KEY => "q" # quit
