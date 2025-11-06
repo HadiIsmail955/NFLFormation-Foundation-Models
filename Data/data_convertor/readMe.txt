@@ -1,56 +1,152 @@
-step one Download raw dataset to filter and preprocessing to create a dataset needed for our task:
-we used dataset from roboflow named Football Jersey Tracker that we forked.
-URL: https://universe.roboflow.com/football-tracking/football-jersey-tracker/browse?queryText=&pageSize=50&startingIndex=50&browseQuery=true
+# 🏈 Football Player Dataset Preparation & Segmentation Pipeline
 
-### First step 
-start by running filter_and_merge_coco.py 
-### description
-The first stage of the code let the user pick images that are needed for our task.
-aprocheded by 3 keys:
-KEEP_KEY => "k"  # keep the image if useful for future preprocessing
-DELETE_KEY => "d"  # delete if no need for it in the dataset
-QUIT_KEY = "q"  # quit early because the loop passes through 3 phases train valid and test you can quit any one of you do not want to procees with picking in one of those three phases
+This pipeline prepares, filters, labels, segments, and reviews a **football player tracking dataset** derived from **[Football Jersey Tracker (Roboflow)](https://universe.roboflow.com/football-tracking/football-jersey-tracker/browse?queryText=&pageSize=50&startingIndex=50&browseQuery=true)**.  
+It standardizes images, player annotations, team roles, and segmentation masks for further training or analysis.
 
-The second stage is merging the picked images and anotations of the 3 phases in same image folder and aontation file for better and more ballanced dataset split.
+---
 
-### Second step 
-Running classify_image_roles.py
-### description
-the code allow user to classify the team with the atack possition and diffence possition and give the formate of offnsive team, as well blur ref and unknown player in image and can be unblured, we are able to place the offnsiveside olways on one side by flipping image horizontally.
-aproched:
-pick the bbox of catigory 1 if atack or defense and the catigory 3 will be the oppsite automaticly:
-ATTACK_FIRST_KEY => "a"
-DEFENSE_FIRST_KEY => "d"
+## 🥇 Step 1 – Filter and Merge Dataset
 
-picking formation by key number:
-    "1": "shotgun"
-    "2": "i-formation"
-    "3": "singleback"
-    "4": "trips-right"
-    "5": "trips-left"
-    "6": "empty"
-    "7": "pistol"
+**Script:** `filter_and_merge_coco.py`
 
-after that confirm information by 
-CONFIRM_KEYS => Enter or Space
+### 🎯 Purpose
+Select only the relevant and high-quality images from the dataset (train/valid/test) and merge them into a single balanced dataset.
 
-Flip image 
-FLIP_KEY => "f" # Flip horizontally
+### ⚙️ Description
+- The user manually reviews each image and decides whether to **keep** or **discard** it.
+- After the review, the script automatically merges all **kept** images and annotations into one unified dataset for easier processing.
 
-other options:
-UNBLUR_KEY => "u" # to save unblurred
-SKIP_KEY => "s"
-QUIT_KEY => "q"
+### 🔑 Controls
 
-### Third step
-Run auto_segment_sam.py
-### description
-It uses SAM and make use of bbox to segment the player.
+| Key | Action |
+|-----|--------|
+| **K** | Keep image (include in dataset) |
+| **D** | Delete image (exclude from dataset) |
+| **Q** | Quit early (skip remaining images in a split) |
 
-### Fourth step
-Run review_and_resegment.py
-### description
-It can allow user to edit segmentation of images if found any unproper segmentation:
-KEEP_KEY => "k" # keep
-RESEG_KEY => "r" # resegment
-QUIT_KEY => "q" # quit
+> 🧩 The script processes images from **train**, **validation**, and **test** splits sequentially.
+
+### 📦 Output
+- Merged dataset under `merged_dataset/`
+  - `images/` – consolidated image folder  
+  - `_annotations_merged.coco.json` – merged COCO file with all kept annotations
+
+---
+
+## 🥈 Step 2 – Classify Image Roles
+
+**Script:** `classify_image_roles.py`
+
+### 🎯 Purpose
+Assign each image with:
+- **Team roles** (offense or defense)
+- **Formation types** (e.g., shotgun, singleback, etc.)
+- **Field orientation** (ensure the offensive side is consistent)
+- Automatically **blur referees and unknown players**
+
+### ⚙️ Description
+- The user identifies whether **category 1** represents the **offensive team** or **defensive team**.  
+  The opposite role is then automatically assigned to **category 3**.
+- The user then selects the **offensive formation** type.
+- The image can be **flipped horizontally** to align all offensive teams to one side of the field.
+
+### 🔑 Controls
+
+| Key | Action |
+|-----|--------|
+| **A** | Set category 1 as **offense first** |
+| **D** | Set category 1 as **defense first** |
+| **1–7** | Select formation type:<br>1️⃣ shotgun<br>2️⃣ i-formation<br>3️⃣ singleback<br>4️⃣ trips-right<br>5️⃣ trips-left<br>6️⃣ empty<br>7️⃣ pistol |
+| **Enter / Space** | Confirm classification |
+| **F** | Flip image horizontally |
+| **U** | Unblur referees and unknown players |
+| **S** | Skip current image |
+| **Q** | Quit early |
+
+### 📦 Output
+- Updated annotations with team roles, formations, and consistent image orientation.
+
+---
+
+## 🥉 Step 3 – Automatic Segmentation with SAM
+
+**Script:** `auto_segment_sam.py`
+
+### 🎯 Purpose
+Automatically generate segmentation masks for each player bounding box using **Meta’s Segment Anything Model (SAM)**.
+
+### ⚙️ Description
+- Loads the merged COCO dataset and applies SAM’s segmentation guided by player bounding boxes.
+- Produces accurate **binary masks** for each player automatically.
+- Saves each mask as a `.png` file and links it to the corresponding annotation in the COCO file.
+
+### 📦 Output
+- Auto-generated player masks saved in `auto_masks/`
+- Updated COCO annotation file (e.g. `_annotations_roles_masks_auto.coco.json`) containing references to mask files
+
+---
+
+## 🏆 Step 4 – Review and Re-Segment Masks
+
+**Script:** `review_and_resegment.py`
+
+### 🎯 Purpose
+Visually review and manually correct segmentation masks for each player — using either **interactive SAM refinement** or **manual mask painting**.
+
+### ⚙️ Description
+- Opens an interactive image viewer.
+- Displays each image with bounding boxes and existing segmentation overlays.
+- Click on any bounding box to enter **edit mode** for that player.
+- You can either:
+  1. **Re-run SAM segmentation** with positive/negative point prompts, or  
+  2. **Manually paint/erase** mask regions pixel-by-pixel.
+
+### 🧠 Features
+- Combine SAM’s automatic segmentation with precise manual correction.
+- Update and save refined masks instantly.
+- All changes update the COCO annotation file and mask images automatically.
+
+### 🔑 Controls
+
+| Key | Action |
+|-----|--------|
+| **n / p** | Next / previous image |
+| **q** | Quit program |
+| **Click on a bbox** | Enter edit mode for that player |
+| **Left-click** | Add positive point for SAM |
+| **Right-click** | Add negative point for SAM |
+| **Middle-click** | Clear current points |
+| **r** | Re-run SAM re-segmentation using current points |
+| **s** | Save current (auto or manual) mask |
+| **e** | Exit edit mode |
+| **u** | Undo last point |
+| **m** | Toggle **manual paint mode** |
+| **Left-drag (paint mode)** | Paint (add mask region) |
+| **Right-drag (paint mode)** | Erase (remove mask region) |
+
+### 💾 Behavior
+- Edited masks are saved to `auto_masks/` as `.png` files.
+- The COCO JSON file is updated to link each annotation to its final verified mask.
+
+### 📦 Output
+- Fully verified, corrected segmentation masks
+- Final COCO annotation file containing accurate player segmentation data
+
+---
+
+## 📚 Summary of Workflow
+
+| Step | Script | Purpose |
+|------|---------|----------|
+| **1** | `filter_and_merge_coco.py` | Filter and merge dataset splits into one |
+| **2** | `classify_image_roles.py` | Assign team roles, formations, and orientations |
+| **3** | `auto_segment_sam.py` | Auto-segment players using SAM |
+| **4** | `review_and_resegment.py` | Review and refine segmentations manually |
+
+---
+
+### ✅ End Result
+A fully processed, annotated, and segmented football dataset ready for:
+- Team and formation analysis  
+- Pose estimation or tracking tasks  
+- Model training (e.g. segmentation or action recognition)
