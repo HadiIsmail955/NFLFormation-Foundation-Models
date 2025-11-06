@@ -5,8 +5,8 @@ from io import BytesIO
 from tqdm import tqdm
 
 # === CONFIG ===
-API_KEY = "AIzaSyCXI238VELpKhQevCaFbHi5_DronfXOAfU"           
-CX = "c1eb50c06defd48a7"   
+API_KEY = ""           
+CX = ""   
 QUERIES = [
     "shotgun formation football",
     "i formation football",
