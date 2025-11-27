@@ -53,9 +53,9 @@ for image_id, ann_list in tqdm(anns_by_image.items()):
         output_path=team_mask_paths
     )
     # Update annotation to point to new team mask
-    images[image_id]["team_mask"] = os.path.relpath(team_mask_paths, source_dir)
-    images[image_id]["offense_mask"] = os.path.relpath(off_team_masks_paths, source_dir)
-    images[image_id]["defense_mask"] = os.path.relpath(def_team_masks_paths, source_dir)
+    images[image_id]["team_mask"] = f"{image_id}_team_mask.png"
+    images[image_id]["offense_mask"] = f"{image_id}_off_mask.png"
+    images[image_id]["defense_mask"] = f"{image_id}_def_mask.png"
     
 # === SAVE UPDATED COCO JSON ===
 with open(os.path.join(source_dir, output_json), 'w') as f:
