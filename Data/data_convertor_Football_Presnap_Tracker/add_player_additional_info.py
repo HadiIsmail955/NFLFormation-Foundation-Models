@@ -5,7 +5,7 @@ from tqdm import tqdm
 merged_coco_path = "_annotations_roles.coco.json"
 images_dir = "blured_images"
 output_json = "_annotations_additional_info.coco.json"
-source_file = "./Football Presnap Tracker.v1i.coco/merged_dataset"
+source_file = "./Data\data_convertor_Football_Presnap_Tracker\Football Presnap Tracker.v1i.coco/merged_dataset"
 
 additional_info_labels = ["position", "alignment"]
 additional_info = {

@@ -5,7 +5,7 @@ import shutil
 from tqdm import tqdm
 
 # === CONFIGURATION ===
-source_dir = "./Football Presnap Tracker.v1i.coco"
+source_dir = "./Data\data_convertor_Football_Presnap_Tracker\Football Presnap Tracker.v1i.coco"
 splits = ["train", "valid", "test"]
 input_json_name = "_annotations.coco.json"
 filtered_json_name = "_annotations_filtered.coco.json"

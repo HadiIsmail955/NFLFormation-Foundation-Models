@@ -3,11 +3,11 @@ import os
 import cv2
 import shutil
 from tqdm import tqdm
-from utils.compare_position import compare_position
-from utils.flip_image import flip_image_horizontally
+from Data.data_convertor_Football_Presnap_Tracker.utils.compare_position import compare_position
+from Data.data_convertor_Football_Presnap_Tracker.utils.flip_image import flip_image_horizontally
 
 # === CONFIGURATION ===
-source_dir = "./Football Presnap Tracker.v1i.coco/merged_dataset"
+source_dir = "./Data\data_convertor_Football_Presnap_Tracker\Football Presnap Tracker.v1i.coco/merged_dataset"
 input_json_name = "_annotations_all.coco.json"
 output_json_name = "_annotations_all.coco.json"
 

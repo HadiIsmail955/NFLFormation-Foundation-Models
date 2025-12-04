@@ -3,7 +3,7 @@ from tqdm import tqdm
 from segment_anything import SamPredictor, sam_model_registry
 
 # ---- CONFIG ----
-source_dir = r".\Football Presnap Tracker.v1i.coco\merged_dataset"
+source_dir = r".\Data\data_convertor_Football_Presnap_Tracker\Football Presnap Tracker.v1i.coco\merged_dataset"
 coco_file = "_annotations_masks_auto.coco.json"
 images_dir = os.path.join(source_dir, "images")
 masks_dir = os.path.join(source_dir, "auto_masks")

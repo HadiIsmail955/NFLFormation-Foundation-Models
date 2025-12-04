@@ -1,10 +1,10 @@
 import os, sys, json, cv2, torch, numpy as np, urllib.request
 from tqdm import tqdm
 from collections import defaultdict
-from utils.merge_masks import merge_team_masks, merge_team_masks_color
+from Data.data_convertor_Football_Presnap_Tracker.utils.merge_masks import merge_team_masks, merge_team_masks_color
 
 # === CONFIGURATION ===
-source_dir = r".\Football Presnap Tracker.v1i.coco\merged_dataset"
+source_dir = r".\Data\data_convertor_Football_Presnap_Tracker\Football Presnap Tracker.v1i.coco\merged_dataset"
 coco_file = "_annotations_masks_auto.coco.json"
 masks_dir = os.path.join(source_dir, "auto_masks")
 team_masks_dir = os.path.join(source_dir, "Team_masks")
@@ -39,10 +39,10 @@ for image_id, ann_list in tqdm(anns_by_image.items()):
             team_masks["offense"].append(os.path.join(masks_dir, ann["segmentation_mask"]))
         elif cat in [1]:  # Defense
             team_masks["defense"].append(os.path.join(masks_dir, ann["segmentation_mask"]))
-    
-    team_mask_paths = os.path.join(all_team_masks_dir, f"{image_id}_team_mask.png")
-    off_team_masks_paths = os.path.join(off_team_masks_dir, f"{image_id}_off_mask.png")
-    def_team_masks_paths = os.path.join(def_team_masks_dir, f"{image_id}_def_mask.png")
+    image_name=img_info["file_name"]
+    team_mask_paths = os.path.join(all_team_masks_dir, f"{image_name}_team_mask.png")
+    off_team_masks_paths = os.path.join(off_team_masks_dir, f"{image_name}_off_mask.png")
+    def_team_masks_paths = os.path.join(def_team_masks_dir, f"{image_name}_def_mask.png")
 
     merge_team_masks(team_masks["offense"], output_path=off_team_masks_paths)
     merge_team_masks(team_masks["defense"], output_path=def_team_masks_paths)
@@ -53,9 +53,9 @@ for image_id, ann_list in tqdm(anns_by_image.items()):
         output_path=team_mask_paths
     )
     # Update annotation to point to new team mask
-    images[image_id]["team_mask"] = f"{image_id}_team_mask.png"
-    images[image_id]["offense_mask"] = f"{image_id}_off_mask.png"
-    images[image_id]["defense_mask"] = f"{image_id}_def_mask.png"
+    images[image_id]["team_mask"] = f"{image_name}_team_mask.png"
+    images[image_id]["offense_mask"] = f"{image_name}_off_mask.png"
+    images[image_id]["defense_mask"] = f"{image_name}_def_mask.png"
     
 # === SAVE UPDATED COCO JSON ===
 with open(os.path.join(source_dir, output_json), 'w') as f:

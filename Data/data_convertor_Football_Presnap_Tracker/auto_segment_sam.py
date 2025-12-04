@@ -2,10 +2,10 @@ import os, sys, json, cv2, torch, numpy as np, urllib.request
 from tqdm import tqdm
 from collections import defaultdict
 from segment_anything import SamPredictor, sam_model_registry
-from utils.convert_mask_to_polygons import convert_mask_to_polygons
+from Data.data_convertor_Football_Presnap_Tracker.utils.convert_mask_to_polygons import convert_mask_to_polygons
 
 # === CONFIGURATION ===
-source_dir = r".\Football Presnap Tracker.v1i.coco\merged_dataset"
+source_dir = r".\Data\data_convertor_Football_Presnap_Tracker\Football Presnap Tracker.v1i.coco\merged_dataset"
 coco_file = "_annotations_all.coco.json"
 images_dir = os.path.join(source_dir, "images")
 masks_dir = os.path.join(source_dir, "auto_masks")

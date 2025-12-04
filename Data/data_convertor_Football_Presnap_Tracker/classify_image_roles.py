@@ -5,7 +5,7 @@ from tqdm import tqdm
 merged_coco_path = "_annotations_all.coco.json"
 images_dir = "images"
 output_json = "_annotations_roles.coco.json"
-source_file = "./Football Presnap Tracker.v1i.coco/merged_dataset"
+source_file = "./Data\data_convertor_Football_Presnap_Tracker\Football Presnap Tracker.v1i.coco/merged_dataset"
 labeled_dir = os.path.join(source_file, "blured_images")
 os.makedirs(labeled_dir, exist_ok=True)
 

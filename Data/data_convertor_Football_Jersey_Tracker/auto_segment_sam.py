@@ -9,7 +9,7 @@ from tqdm import tqdm
 from segment_anything import SamPredictor, sam_model_registry
 
 # === CONFIGURATION ===
-source_dir = r"..\Football Jersey Tracker.v1i.coco\merged_dataset"
+source_dir = r".\Football Jersey Tracker.v1i.coco\merged_dataset"
 coco_file = "_annotations_roles.coco.json"
 images_dir = os.path.join(source_dir, "images")
 masks_dir = os.path.join(source_dir, "auto_masks")
