@@ -55,10 +55,4 @@ class PresnapDataset(Dataset):
             formation_label = torch.tensor(formation_label, dtype=torch.long)
 
         return image, seg_image, mask, meta, formation_label
-
-        
-
-
-
-        
         

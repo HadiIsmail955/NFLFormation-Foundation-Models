@@ -18,13 +18,17 @@ def_team_masks_dir = os.path.join(team_masks_dir, "resize_def_masks")
 os.makedirs(def_team_masks_dir, exist_ok=True)
 all_team_masks_dir = os.path.join(team_masks_dir, "resize_all_masks")
 os.makedirs(all_team_masks_dir, exist_ok=True)
+off_team_multi_masks_dir = os.path.join(team_masks_dir, "resize_off_multi_masks")
+os.makedirs(off_team_multi_masks_dir, exist_ok=True)
+all_team_multi_masks_dir = os.path.join(team_masks_dir, "resize_all_multi_masks")
+os.makedirs(all_team_multi_masks_dir, exist_ok=True)
 output_json = "_annotations_mergered_masks_auto_resized.coco.json"
 
 with open(os.path.join(source_dir, coco_file)) as f:
     coco = json.load(f)
 
 images = coco["images"]
-files=[["team_mask",all_team_masks_dir,"Team_masks/all_masks"], ["offense_mask",off_team_masks_dir,"Team_masks/off_masks"], ["defense_mask",def_team_masks_dir,"Team_masks/def_masks"], ["file_name",image_dir,"images"]]
+files=[["team_mask",all_team_masks_dir,"Team_masks/all_masks"], ["offense_mask",off_team_masks_dir,"Team_masks/off_masks"],["team_multi_mask",all_team_multi_masks_dir,"Team_masks/all_multi_masks"], ["offense_multi_mask",off_team_multi_masks_dir,"Team_masks/off_multi_masks"], ["defense_mask",def_team_masks_dir,"Team_masks/def_masks"], ["file_name",image_dir,"images"]]
 
 
 for img_info  in tqdm(images):
