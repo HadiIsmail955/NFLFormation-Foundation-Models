@@ -8,4 +8,5 @@ google api key.txt
 src/model/models/*
 /dataSet
 notes.md
-/output
+/outputs
+/logs

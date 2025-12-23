@@ -11,7 +11,8 @@ from src.model.SAMSegmenter_v1_0 import SAMSegmenter
 from src.utils.losses import make_loss
 from src.utils.metrics import dice_iou_from_logits
 from src.utils.experiment_logger import ExperimentLogger
-from src.utils.seed import set_seed
+from src.data_loader.collate import presnap_collate_fn
+# from src.utils.seed import set_seed
 
 
 def log(msg, logger):
@@ -20,7 +21,7 @@ def log(msg, logger):
 
 
 def train_phase(cfg):
-    set_seed(cfg["seed"])
+    # set_seed(cfg["seed"])
 
     logger = ExperimentLogger(exp_name="seg_phase_v1-0")
     logger.save_config(cfg)
@@ -68,6 +69,7 @@ def train_phase(cfg):
         num_workers=cfg["num_workers"],
         pin_memory=(device == "cuda"),
         persistent_workers=persistent,
+        collate_fn=presnap_collate_fn,
     )
 
     val_loader = DataLoader(
@@ -77,6 +79,7 @@ def train_phase(cfg):
         num_workers=cfg["num_workers"],
         pin_memory=(device == "cuda"),
         persistent_workers=persistent,
+        collate_fn=presnap_collate_fn,
     )
 
     log(

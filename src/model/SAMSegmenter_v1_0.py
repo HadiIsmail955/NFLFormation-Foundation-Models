@@ -18,22 +18,28 @@ class SAMSegmenter(nn.Module):
             "vit_b": "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth",
         }
         sam_checkpoint = f"sam_{sam_type}.pth"
+        
+        ckpt_root = ckpt_dir
+        os.makedirs(ckpt_root, exist_ok=True)
 
-        ckpt_dir= os.path.join(ckpt_dir,sam_checkpoint)
+        ckpt_path = os.path.join(ckpt_root, sam_checkpoint)
 
         # === DOWNLOAD SAM IF NEEDED ===
-        if not os.path.exists(ckpt_dir):
+        if not os.path.exists(ckpt_path):
             url = sam_urls[sam_type]
             print(f"Downloading SAM checkpoint ({sam_type}) from {url} ...")
+
             def show_progress(block_num, block_size, total_size):
                 downloaded = block_num * block_size
                 progress = min(int(downloaded / total_size * 100), 100)
                 sys.stdout.write(f"\rDownloading: {progress}%")
                 sys.stdout.flush()
-            urllib.request.urlretrieve(url, ckpt_dir, reporthook=show_progress)
-            print("\n Download complete!")
 
-        sam = sam_model_registry[sam_type](checkpoint=ckpt_dir)
+            urllib.request.urlretrieve(url, ckpt_path, reporthook=show_progress)
+            print("\nDownload complete!")
+
+        sam = sam_model_registry[sam_type](checkpoint=ckpt_path)
+
 
         self.backbone = SAMBackbone(
             sam=sam,
