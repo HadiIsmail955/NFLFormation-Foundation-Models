@@ -1,8 +1,8 @@
 import os
 import json
 
-source_dir = r".\Football Presnap Tracker.v1i.coco\merged_dataset"
-coco_file = "_annotations_mergered_masks_auto.coco.json"
+source_dir = r".\Data\data_convertor_Football_Presnap_Tracker\Football Presnap Tracker.v1i.coco\merged_dataset"
+coco_file = "_annotations_additional_info.coco.json"
 
 images_dir = os.path.join(source_dir, "images")
 auto_masks_dir = os.path.join(source_dir, "auto_masks")
@@ -16,6 +16,22 @@ def_team_dir = os.path.join(team_masks_root, "def_masks")
 coco_path = os.path.join(source_dir, coco_file)
 with open(coco_path, "r") as f:
     coco = json.load(f)
+
+    # alignments = {
+    #     ann["alignment"]
+    #     for ann in coco.get("annotations", [])
+    #     if "alignment" in ann
+    # }
+    # positions = {
+    #     ann["position"]
+    #     for ann in coco.get("annotations", [])
+    #     if "position" in ann
+    # }
+
+    # print("alignments", sorted(alignments))
+    # print("positions", sorted(positions))
+
+
 
 def check_folder(expected_set, folder_path, label):
     valid_exts = {".png"}

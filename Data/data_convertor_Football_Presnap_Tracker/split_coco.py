@@ -5,10 +5,10 @@ from copy import deepcopy
 from collections import defaultdict
 
 source_dir = r".\Data\data_convertor_Football_Presnap_Tracker\Football Presnap Tracker.v1i.coco\merged_dataset"
-coco_file = "_annotations_mergered_masks_auto.coco.json"
+coco_file = "_annotations_additional_info.coco.json"
 output_dir = "splits"
-train_ratio = 0.8
-val_ratio = 0.1
+train_ratio = 0.9
+val_ratio = 0.0
 test_ratio = 0.1
 random_seed = 42
 
@@ -27,7 +27,7 @@ annotations = coco.get("annotations", [])
 formation_to_images = defaultdict(list)
 
 for img in images:
-    formation = img.get("formation", None)
+    formation = img.get("attributes", None).get("formation", None)
     if formation is None:
         formation = "unknown"  
     formation_to_images[formation].append(img)
@@ -76,8 +76,11 @@ with open(os.path.join(output_dir, "test.json"), "w") as f:
 print("Split completed!")
 print(f"Train: {len(train_images)} images")
 print(f"Validation: {len(val_images)} images")
-print(f"Test: {len(test_images)} images")
+print(f"Test: {len(test_images)} images\n")
 
 for formation, imgs in formation_to_images.items():
-    n_train = len([img for img in train_images if img.get("extra", {}).get("formation","unknown") == formation])
-    print(f"Train - {formation}: {n_train} images")
+    n_train = len([img for img in train_images if img.get("attributes", {}).get("formation", "unknown") == formation])
+    n_val = len([img for img in val_images if img.get("attributes", {}).get("formation", "unknown") == formation])
+    n_test = len([img for img in test_images if img.get("attributes", {}).get("formation", "unknown") == formation])
+    
+    print(f"{formation} - Train: {n_train}, Val: {n_val}, Test: {n_test}")
