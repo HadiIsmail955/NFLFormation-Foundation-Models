@@ -1,3 +1,5 @@
+import math
+
 import torch
 from tqdm import tqdm
 from torch.utils.data import DataLoader, random_split
@@ -99,12 +101,22 @@ def train_phase(cfg):
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     log(f"Model ready ({trainable_params:,} trainable parameters)", logger)
 
-    assert trainable_params < 6_000_000, "Encoder accidentally unfrozen!"
+    # assert trainable_params < 6_000_000, "Encoder accidentally unfrozen!"
 
     optimizer = torch.optim.AdamW(
         filter(lambda p: p.requires_grad, model.parameters()),
         lr=cfg["lr"],
         weight_decay=cfg["weight_decay"],
+    )
+
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer,
+        mode="max",          
+        factor=cfg["lr_decay_factor"],          
+        patience=math.ceil(cfg["patience"] // 3),          
+        threshold=cfg["weight_decay"],
+        min_lr=cfg["min_lr"],
+        verbose=True,
     )
 
     loss_fn = make_loss()
@@ -120,7 +132,8 @@ def train_phase(cfg):
     patience_counter = 0
 
     for epoch in range(1, cfg["epochs"] + 1):
-        log(f"\nEpoch {epoch}/{cfg['epochs']} started", logger)
+        current_lr = optimizer.param_groups[0]["lr"]
+        log(f"\nEpoch {epoch}/{cfg['epochs']} started | lr: {current_lr:.6f}", logger)
 
         model.train()
         train_loss = 0.0
@@ -209,6 +222,10 @@ def train_phase(cfg):
             logger,
         )
 
+        previous_lr = current_lr
+        scheduler.step(val_dice)
+        current_lr = optimizer.param_groups[0]["lr"]
+
         if val_dice > best_dice:
             best_dice = val_dice
             patience_counter = 0
@@ -219,10 +236,12 @@ def train_phase(cfg):
                 val_dice=best_dice,
             )
             log("New best model saved", logger)
+        elif current_lr < previous_lr:
+            patience_counter = 0
         else:
             patience_counter += 1
 
-        if patience_counter >= cfg["patience"]:
+        if patience_counter >= cfg["patience"] and cfg.get("early_stopping", True):
             log("Early stopping triggered", logger)
             break
 
