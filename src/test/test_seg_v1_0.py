@@ -50,7 +50,7 @@ def test_phase(cfg, logger):
         unfreeze_last_blocks=0,
     ).to(device)
 
-    ckpt_path = os.path.join(cfg["run_dir"], "best.pt")
+    ckpt_path = logger.get_best_checkpoint_path()
     state = torch.load(ckpt_path, map_location=device)
     model.load_state_dict(state["model"])
     model.eval()
@@ -59,7 +59,7 @@ def test_phase(cfg, logger):
 
     loss_fn = make_loss()
 
-    vis_dir = os.path.join(cfg["run_dir"], "vis", "test")
+    vis_dir = logger.get_viz_dir()
     os.makedirs(vis_dir, exist_ok=True)
 
     total_loss = total_dice = total_iou = 0.0
