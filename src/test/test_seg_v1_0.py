@@ -118,7 +118,8 @@ def test_phase(cfg, logger):
         "test_recall": total_rec / n,
     }
 
-    logger.log_metrics(metrics)
+    for k, v in metrics.items():
+        logger.logger.info(f"{k}: {v:.6f}")
 
     logger.logger.info(
         "Test results | "
