@@ -12,7 +12,6 @@ from src.model.SAMSegmenter_v1_0 import SAMSegmenter
 
 from src.utils.losses import make_loss
 from src.utils.metrics import dice_iou_from_logits
-from src.utils.experiment_logger import ExperimentLogger
 from src.data_loader.collate import presnap_collate_fn
 # from src.utils.seed import set_seed
 
@@ -22,12 +21,8 @@ def log(msg, logger):
     logger.logger.info(msg)
 
 
-def train_phase(cfg):
+def train_phase(cfg, logger):
     # set_seed(cfg["seed"])
-
-    logger = ExperimentLogger(exp_name="seg_phase_v1-0")
-    logger.save_config(cfg)
-
     log("Initializing training...", logger)
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -40,7 +35,7 @@ def train_phase(cfg):
 
     dataset = PresnapDataset(
         data_source=cfg["data_root"],
-        coco_file=cfg["coco_file"],
+        coco_file=cfg["train_coco_file"],
         seg_transform=seg_tf,
         classifier_transform=None,
     )

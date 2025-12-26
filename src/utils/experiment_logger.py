@@ -93,5 +93,8 @@ class ExperimentLogger:
     def get_viz_dir(self):
         return self.viz_dir
 
+    def get_best_checkpoint_path(self):
+        return os.path.join(self.run_dir, "best.pt")
+    
     def close(self):
         self.csv_file.close()

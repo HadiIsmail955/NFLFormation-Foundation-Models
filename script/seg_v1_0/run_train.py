@@ -1,4 +1,5 @@
 from src.train.train_seg_v1_0 import train_phase
+from src.utils.experiment_logger import ExperimentLogger
 
 def main():
     cfg = {
@@ -11,7 +12,8 @@ def main():
         ],
         "seed": 42,
         "data_root": "dataSet",
-        "coco_file": "dataSet/splits/train.json",
+        "train_coco_file": "dataSet/splits/train.json",
+        "test_coco_file": "dataSet/splits/test.json",
         "img_size": 1024,
         "val_split": 0.1,
         "batch_size": 4,
@@ -28,8 +30,9 @@ def main():
         "min_lr": 1e-7,
         "early_stopping": True,
     }
-
-    train_phase(cfg)
+    logger = ExperimentLogger(exp_name="seg_phase_v1-0")
+    logger.save_config(cfg)
+    train_phase(cfg, logger)
 
 if __name__ == "__main__":
     main()
