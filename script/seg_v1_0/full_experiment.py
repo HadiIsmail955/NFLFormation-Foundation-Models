@@ -15,6 +15,7 @@ def main():
         "data_root": "dataSet",
         "train_coco_file": "dataSet/splits/train.json",
         "test_coco_file": "dataSet/splits/test.json",
+        "continue_from_ckpt": None,
         "img_size": 1024,
         "val_split": 0.1,
         "batch_size": 4,
@@ -31,9 +32,11 @@ def main():
         "min_lr": 1e-7,
         "early_stopping": True,
     }
+    train=True
     logger = ExperimentLogger(exp_name="seg_phase_v1-0")
     logger.save_config(cfg)
-    train_phase(cfg, logger)
+    if train:
+        train_phase(cfg, logger)
     test_phase(cfg, logger)
 
 
