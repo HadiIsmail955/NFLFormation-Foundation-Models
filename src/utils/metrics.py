@@ -53,3 +53,9 @@ def precision_recall_from_logits(
         return precision.mean().item(), recall.mean().item()
     else:
         return precision, recall
+    
+
+@torch.no_grad()
+def accuracy_from_logits(logits, targets):
+    preds = torch.argmax(logits, dim=1)
+    return (preds == targets).float().mean().item()

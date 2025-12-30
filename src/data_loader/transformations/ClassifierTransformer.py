@@ -1,7 +1,9 @@
+import torch
 from torchvision import transforms
+import torchvision.transforms.functional as TF
 
 class ClassifierTransformer:
-    def __init__(self, backbone="dino3", img_size=224):
+    def __init__(self, backbone="dino3", img_size=1024):
         self.img_size = img_size
         
         if backbone.lower() == "dino3":
@@ -20,5 +22,15 @@ class ClassifierTransformer:
         ])
         
     def __call__(self, image):
-        image_tensor = self.image_transform(image)
-        return image_tensor
+        if not isinstance(image, torch.Tensor):
+            image = self.image_transform(image)
+        else:
+            is_batched = image.dim() == 4
+            if not is_batched:
+                image = image.unsqueeze(0)  # [1,3,H,W]
+            image = TF.resize(image, (self.img_size, self.img_size))
+            image = TF.normalize(image, mean=self.mean, std=self.std)
+            if not is_batched:
+                image = image.squeeze(0)
+
+        return image

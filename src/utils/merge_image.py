@@ -1,5 +1,6 @@
-import numpy as np
 import cv2
+import numpy as np
+import torch
 
 def save_overlay_with_metrics(
     image,
@@ -51,3 +52,60 @@ def save_overlay_with_metrics(
         )
 
     cv2.imwrite(save_path, overlay[..., ::-1])
+
+def save_classification_overlay(
+    image,
+    gt_label,
+    pred_label,
+    confidence,
+    save_path,
+    id_to_class,
+):
+
+    if isinstance(image, torch.Tensor):
+        img = image.detach().cpu()
+
+        img = img - img.min()
+        img = img / (img.max() + 1e-6)
+
+        img = img.permute(1, 2, 0).numpy()
+        img = (img * 255).astype(np.uint8)
+    else:
+        raise TypeError("Image must be a torch.Tensor")
+
+    img = img[..., ::-1]
+
+    gt_name = id_to_class.get(gt_label, "unknown")
+    pred_name = id_to_class.get(pred_label, "unknown")
+
+    correct = (gt_label == pred_label)
+
+    color = (0, 200, 0) if correct else (0, 0, 255)
+
+    lines = [
+        f"GT:   {gt_name}",
+        f"PRED: {pred_name}",
+        f"CONF: {confidence:.3f}",
+    ]
+
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = 0.6
+    thickness = 2
+
+    x, y0 = 10, 28
+    dy = 24
+
+    for i, line in enumerate(lines):
+        y = y0 + i * dy
+        cv2.putText(
+            img,
+            line,
+            (x, y),
+            font,
+            font_scale,
+            color,
+            thickness,
+            cv2.LINE_AA,
+        )
+
+    cv2.imwrite(save_path, img)
