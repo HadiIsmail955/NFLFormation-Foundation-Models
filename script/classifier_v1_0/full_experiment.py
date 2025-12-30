@@ -16,6 +16,7 @@ def main():
         "train_coco_file": "dataSet/splits/train.json",
         "test_coco_file": "dataSet/splits/test.json",
         "continue_from_ckpt": None,
+        "seg_from_ckpt": None,
         "img_size": 1024,
         "val_split": 0.1,
         "batch_size": 4,
