@@ -17,6 +17,7 @@ class SAMSegmenter(nn.Module):
             "vit_l": "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_l_0b3195.pth",
             "vit_b": "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth",
         }
+        
         sam_checkpoint = f"sam_{sam_type}.pth"
         
         ckpt_root = ckpt_dir
@@ -24,7 +25,6 @@ class SAMSegmenter(nn.Module):
 
         ckpt_path = os.path.join(ckpt_root, sam_checkpoint)
 
-        # === DOWNLOAD SAM IF NEEDED ===
         if not os.path.exists(ckpt_path):
             url = sam_urls[sam_type]
             print(f"Downloading SAM checkpoint ({sam_type}) from {url} ...")

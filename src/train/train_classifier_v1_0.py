@@ -89,14 +89,14 @@ def train_phase(cfg, logger):
 
     sam_model = SAMSegmenter(
         sam_type=cfg["sam_type"],
-        ckpt_dir=cfg["ckpt_dir"],
+        ckpt_dir=cfg["sam_ckpt_dir"],
         unfreeze_last_blocks=cfg["unfreeze_last_blocks"],
     ).to(device)
 
     assert cfg.get("seg_from_ckpt", None) is None, "seg_from_ckpt must be a string path or None"
     state = torch.load(cfg.get("seg_from_ckpt", None), map_location=device)
     sam_model.load_state_dict(state["model"])
-    log(f"loaded seg model from checkpoint: {cfg.get("seg_from_ckpt",None)}", logger)
+    log(f"loaded seg model from checkpoint: {cfg.get('seg_from_ckpt', None)}", logger)
 
     
     sam_model.eval()
