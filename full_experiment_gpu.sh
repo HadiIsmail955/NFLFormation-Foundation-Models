@@ -4,15 +4,13 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --gres=gpu:1
-#SBATCH --time=12:00:00
+#SBATCH --time=3:00:00
 
 #SBATCH --cpus-per-task=24
 #SBATCH --mem=160G
 
 #SBATCH --output=logs/%x-%j.out
 #SBATCH --error=logs/%x-%j.err
-
-# NO --exclusive
 
 module purge
 module load devel/python/3.11.7-gnu-11.4
