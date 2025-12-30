@@ -93,6 +93,11 @@ def train_phase(cfg, logger):
         unfreeze_last_blocks=cfg["unfreeze_last_blocks"],
     ).to(device)
 
+    if cfg.get("continue_from_ckpt", None) is not None:
+        state = torch.load(cfg.get("continue_from_ckpt", None), map_location=device)
+        model.load_state_dict(state["model"])
+        log(f"Continuing training from checkpoint: {cfg.get("continue_from_ckpt",None) is not None}", logger)
+
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     log(f"Model ready ({trainable_params:,} trainable parameters)", logger)
 
