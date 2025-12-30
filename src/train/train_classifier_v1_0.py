@@ -96,7 +96,7 @@ def train_phase(cfg, logger):
     assert cfg.get("seg_from_ckpt", None) is None, "seg_from_ckpt must be a string path or None"
     state = torch.load(cfg.get("seg_from_ckpt", None), map_location=device)
     sam_model.load_state_dict(state["model"])
-    log(f"loaded seg model from checkpoint: {cfg.get("seg_from_ckpt",None)}", logger)
+    log(f"loaded seg model from checkpoint: {cfg.get('seg_from_ckpt', None)}", logger)
 
     
     sam_model.eval()
