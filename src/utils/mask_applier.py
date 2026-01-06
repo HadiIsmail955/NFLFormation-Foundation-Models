@@ -7,7 +7,8 @@ def apply_mask(image, mask, mode="soft"):
         return image * (mask > 0.5)
 
     elif mode == "soft":
-        return image * mask
+        return image * (0.7 + 0.3 * mask)
+
 
     elif mode == "background_gray":
         gray = image.mean(dim=1, keepdim=True)

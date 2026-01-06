@@ -28,7 +28,10 @@ def main():
         "patience": 10,
         "lr_decay_factor": 0.5,
         "min_lr": 1e-7,
+        "threshold": 1e-3,
         "early_stopping": True,
+        "flip_augmentation": False,
+        "flip_prob": 0.5,
     }
     logger = ExperimentLogger(exp_name="seg_phase_v1-0")
     logger.save_config(cfg)

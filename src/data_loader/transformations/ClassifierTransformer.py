@@ -3,7 +3,7 @@ from torchvision import transforms
 import torchvision.transforms.functional as TF
 
 class ClassifierTransformer:
-    def __init__(self, backbone="dino3", img_size=1024):
+    def __init__(self, backbone="dino3", img_size=1008):
         self.img_size = img_size
         
         if backbone.lower() == "dino3":

@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=sam-full-train
-#SBATCH --partition=gpu_a100_il
+#SBATCH --partition=gpu_h100
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --gres=gpu:1

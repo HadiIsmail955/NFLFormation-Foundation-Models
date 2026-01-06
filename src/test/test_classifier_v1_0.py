@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 from tqdm import tqdm
 from torch.utils.data import DataLoader
-from torch import autocast
+from torch.cuda.amp import autocast
 
 from src.data_loader.custom_data.PresnapDataset import PresnapDataset
 from src.model.SAMSegmenter_v1_0 import SAMSegmenter
@@ -12,22 +12,22 @@ from src.model.SAM_DINOClassifier_v1_0 import SAMDINOClassifier
 from src.utils.merge_image import save_classification_overlay
 
 FORMATION_MAP = {
-        "shotgun": 0,
-        "singleback": 1,
-        "ace-left": 2,
-        "ace-right": 3,
-        "trips-left": 4,
-        "trips-right": 5,
-        "twins-right": 6,
-        "bunch-left": 7,
-        "bunch-right": 8,
-        "i-formation": 9,
-        "trey-left": 10,
-        "trey-right": 11,
-        "empty": 12,
-        "double-tight": 13,
-        "heavy": 14,
-    }
+    "shotgun": 0,
+    "singleback": 1,
+    "ace-left": 2,
+    "ace-right": 3,
+    "trips-left": 4,
+    "trips-right": 5,
+    "twins-right": 6,
+    "bunch-left": 7,
+    "bunch-right": 8,
+    "i-formation": 9,
+    "trey-left": 10,
+    "trey-right": 11,
+    "empty": 12,
+    "double-tight": 13,
+    "heavy": 14,
+}
 
 ID_TO_FORMATION = {v: k for k, v in FORMATION_MAP.items()}
 
@@ -39,12 +39,16 @@ def test_phase(cfg, logger):
     amp_enabled = (device == "cuda")
     logger.logger.info(f"Using device: {device}")
 
+    seg_tf = SegTransform()
+
     dataset = PresnapDataset(
         data_source=cfg["data_root"],
         coco_file=cfg["test_coco_file"],
-        seg_transform=None,
+        seg_transform=seg_tf,
         classifier_transform=None,
-    )
+        enable_flip=cfg["flip_augmentation"],
+        flip_prob=cfg["flip_prob"],
+        )
 
     test_loader = DataLoader(
         dataset,
@@ -68,7 +72,6 @@ def test_phase(cfg, logger):
     classifier = DINOClassifier(
         num_classes=cfg["num_classes"],
         dino_type=cfg["dino_type"],
-        ckpt_dir=cfg["dino_ckpt_dir"],
     ).to(device)
 
     model = SAMDINOClassifier(
@@ -80,7 +83,9 @@ def test_phase(cfg, logger):
     ckpt_path = logger.get_best_checkpoint_path()
     state = torch.load(ckpt_path, map_location=device)
     model.load_state_dict(state["model"], strict=True)
+
     model.eval()
+    model.sam.eval()
 
     logger.logger.info(f"Loaded checkpoint: {ckpt_path}")
 
@@ -94,13 +99,11 @@ def test_phase(cfg, logger):
     total = 0
     sample_idx = 0
 
-    test_bar = tqdm(test_loader, desc="Testing", leave=False)
-
-    for batch in test_bar:
-        images = batch["image"].to(device, non_blocking=True)
+    for batch in tqdm(test_loader, desc="Testing", leave=False):
+        images = batch["seg_image"].to(device, non_blocking=True)
         labels = batch["formation_label"].to(device, non_blocking=True)
 
-        with autocast(device_type="cuda", enabled=amp_enabled):
+        with autocast(enabled=amp_enabled):
             logits = model(images)
             loss = criterion(logits, labels)
 
@@ -128,6 +131,6 @@ def test_phase(cfg, logger):
 
     logger.logger.info(f"test_loss: {avg_loss:.6f}")
     logger.logger.info(f"test_accuracy: {accuracy:.4f}")
-
     logger.logger.info("Classification testing finished.")
+
     logger.close()

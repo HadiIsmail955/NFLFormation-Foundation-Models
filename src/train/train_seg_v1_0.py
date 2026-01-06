@@ -38,7 +38,9 @@ def train_phase(cfg, logger):
         coco_file=cfg["train_coco_file"],
         seg_transform=seg_tf,
         classifier_transform=None,
-    )
+        enable_flip=cfg["flip_augmentation"],
+        flip_prob=cfg["flip_prob"],
+        )
 
     log(f"Dataset loaded: {len(dataset)} samples", logger)
 
@@ -117,8 +119,9 @@ def train_phase(cfg, logger):
         optimizer,
         mode="max",          
         factor=cfg["lr_decay_factor"],          
-        patience=math.ceil(cfg["patience"] // 3),          
-        threshold=cfg["weight_decay"],
+        patience=math.ceil(cfg["patience"] // 2),          
+        threshold=cfg["threshold"],
+        threshold_mode="rel",
         min_lr=cfg["min_lr"],
         verbose=True,
     )

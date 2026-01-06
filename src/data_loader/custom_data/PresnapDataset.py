@@ -1,6 +1,7 @@
 import os
 import json
 import torch
+import random
 from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms
@@ -34,30 +35,36 @@ class PresnapDataset(Dataset):
 
     FORMATION_MAP = {
         "shotgun": 0,
-        "singleback": 1,
-        "ace-left": 2,
-        "ace-right": 3,
-        "trips-left": 4,
-        "trips-right": 5,
-        "twins-right": 6,
-        "bunch-left": 7,
-        "bunch-right": 8,
-        "i-formation": 9,
-        "trey-left": 10,
-        "trey-right": 11,
-        "empty": 12,
-        "double-tight": 13,
-        "heavy": 14,
+        "ace-left": 1,
+        "ace-right": 2,
+        "trips-left": 3,
+        "trips-right": 4,
+        "twins-right": 5,
+        "bunch-left": 6,
+        "bunch-right": 7,
+        "i-formation": 8,
+        "trey-left": 9,
+        "trey-right": 10,
+        "empty": 11,
+        "double-tight": 12,
+        "heavy": 13,
     }
 
-    def __init__(self, data_source, coco_file, seg_transform=None, classifier_transform=None):
+    def __init__(self, data_source, coco_file, seg_transform=None, classifier_transform=None, enable_flip=False, flip_prob=0.5):
         super().__init__()
         self.data_source=data_source
         self.seg_transform=seg_transform
         self.classifier_transform=classifier_transform
-
+        self.enable_flip=enable_flip
+        self.flip_prob=flip_prob
         with open(coco_file, 'r') as f:
             self.coco = json.load(f)
+        from collections import Counter
+
+        labels = [img["attributes"]["formation"] for img in self.coco["images"]
+                if img.get("attributes", {}).get("formation") in self.FORMATION_MAP]
+        
+        print(Counter(labels))
 
         self.img_folder_path = os.path.join(data_source,"images")
         self.seg_img_folder_path = os.path.join(data_source,"resize_images")
@@ -65,13 +72,15 @@ class PresnapDataset(Dataset):
         self.mask_per_player_img_folder_path = os.path.join(data_source,"resize_players_masks")
         self.images = [
             img for img in self.coco['images']
-            if img.get('attributes', {}).get('formation', 'unknown') not in self.RARE_FORMATIONS
+            if img.get('attributes', {}).get('formation') in self.FORMATION_MAP
         ]
 
     def __len__(self):
         return len(self.images)
     
     def __getitem__(self, idx):
+        do_flip = self.enable_flip and random.random() < self.flip_prob
+
         img_entry = self.images[idx]
 
         img_path = os.path.join(self.img_folder_path, img_entry['file_name'])
@@ -86,7 +95,11 @@ class PresnapDataset(Dataset):
 
 
         if self.seg_transform:
-            seg_image, mask= self.seg_transform(seg_image, mask)
+            seg_image, mask = self.seg_transform.apply(
+                image=seg_image,
+                mask=mask,
+                do_flip=do_flip,
+            )
         if self.classifier_transform:
             image= self.classifier_transform(image)
         else:
@@ -102,7 +115,7 @@ class PresnapDataset(Dataset):
         roles = []
         positions = []
         alignments = []
-        playerMask = []
+        playerMasks = []
 
         anns = [ann for ann in self.coco.get('annotations', []) if ann['image_id'] == img_entry['id']]
         for ann in anns:
@@ -135,6 +148,9 @@ class PresnapDataset(Dataset):
             y_norm = y_new / new_h
             w_norm = w_new / new_w
             h_norm = h_new / new_h
+
+            if do_flip:
+                x_norm = 1.0 - (x_norm + w_norm)
             
             bboxes.append([x_norm, y_norm, w_norm, h_norm])
             
@@ -148,15 +164,17 @@ class PresnapDataset(Dataset):
 
             mask_per_player_path = os.path.join(self.mask_per_player_img_folder_path, ann["segmentation_mask"])
             mask_per_player = Image.open(mask_per_player_path).convert("L")
-            playerMask.append(mask_per_player)
+            _, pm = self.seg_transform.apply(
+                image=None,
+                mask=mask_per_player,
+                do_flip=do_flip,
+            )
+            playerMasks.append(pm)
         
         bboxes = torch.tensor(bboxes, dtype=torch.float32)
         roles = torch.tensor(roles, dtype=torch.long)
         positions = torch.tensor(positions, dtype=torch.long)
         alignments = torch.tensor(alignments, dtype=torch.long)
-
-        if self.seg_transform:
-            playerMask = [self.seg_transform(m)[0] for m in playerMask]
             
         return {
                 # "image": image,
@@ -168,6 +186,6 @@ class PresnapDataset(Dataset):
                 "roles": roles,
                 "positions": positions,
                 "alignments": alignments,
-                "playerMasks": playerMask
+                "playerMasks": playerMasks
             }
         

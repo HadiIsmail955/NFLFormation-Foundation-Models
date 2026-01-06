@@ -30,7 +30,9 @@ def test_phase(cfg, logger):
         coco_file=cfg["test_coco_file"],
         seg_transform=seg_tf,
         classifier_transform=None,
-    )
+        enable_flip=cfg["flip_augmentation"],
+        flip_prob=cfg["flip_prob"],
+        )
 
     logger.logger.info(f"Test dataset loaded: {len(dataset)} samples")
 

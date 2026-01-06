@@ -1,8 +1,9 @@
+import math
 import torch
 import torch.nn as nn
 from tqdm import tqdm
 from torch.utils.data import DataLoader, random_split
-from torch import autocast
+from torch.cuda.amp import autocast
 from torch.amp import GradScaler
 
 from src.data_loader.custom_data.PresnapDataset import PresnapDataset
@@ -17,7 +18,6 @@ from src.data_loader.collate import presnap_collate_fn
 
 
 def log(msg, logger):
-    # print(msg)
     logger.logger.info(msg)
 
 
@@ -38,11 +38,11 @@ def train_phase(cfg, logger):
         coco_file=cfg["train_coco_file"],
         seg_transform=seg_tf,
         classifier_transform=None,
-    )
+        enable_flip=cfg["flip_augmentation"],
+        flip_prob=cfg["flip_prob"],
+        )
 
     log(f"Dataset loaded: {len(dataset)} samples", logger)
-
-    log("Splitting dataset into train / validation...", logger)
 
     val_len = int(len(dataset) * cfg["val_split"])
     train_len = len(dataset) - val_len
@@ -54,8 +54,6 @@ def train_phase(cfg, logger):
     )
 
     log(f"Split done -> train={train_len}, val={val_len}", logger)
-
-    log("Creating DataLoaders...", logger)
 
     persistent = cfg["num_workers"] > 0
 
@@ -85,51 +83,65 @@ def train_phase(cfg, logger):
         logger,
     )
 
-    log("Initializing model...", logger)
+    log("Initializing SAM model...", logger)
 
     sam_model = SAMSegmenter(
         sam_type=cfg["sam_type"],
-        ckpt_dir=cfg["ckpt_dir"],
+        ckpt_dir=cfg["sam_ckpt_dir"],
         unfreeze_last_blocks=cfg["unfreeze_last_blocks"],
     ).to(device)
 
-    assert cfg.get("seg_from_ckpt", None) is None, "seg_from_ckpt must be a string path or None"
-    state = torch.load(cfg.get("seg_from_ckpt", None), map_location=device)
-    sam_model.load_state_dict(state["model"])
-    log(f"loaded seg model from checkpoint: {cfg.get('seg_from_ckpt', None)}", logger)
+    assert isinstance(cfg.get("seg_from_ckpt", None), str), \
+        "seg_from_ckpt must be a valid checkpoint path"
 
-    
+    state = torch.load(cfg["seg_from_ckpt"], map_location=device)
+    sam_model.load_state_dict(state.get("model", state), strict=True)
+
+    log(f"Loaded SAM model from: {cfg['seg_from_ckpt']}", logger)
+
     sam_model.eval()
     for p in sam_model.parameters():
         p.requires_grad = False
 
+    log("Initializing DINO classifier...", logger)
+
     dino_classifier = DINOClassifier(
-            num_classes=cfg["num_classes"],
-            dino_type=cfg["dino_type"],
-            ckpt_dir=cfg["dino_ckpt_dir"],
-            pretrained=True,
-            unfreeze_last_blocks=cfg["unfreeze_last_blocks"],
-        ).to(device)
-    
+        num_classes=cfg["num_classes"],
+        dino_type=cfg["dino_type"],
+        unfreeze_last_blocks=cfg["unfreeze_last_blocks"],
+        freeze_backbone=True,
+    ).to(device)
+
+    # Ensure DINO backbone stays in eval mode
+    dino_classifier.backbone.encoder.eval()
+
     model = SAMDINOClassifier(
         sam_model=sam_model,
         dino_classifier=dino_classifier,
         mask_mode=cfg["mask_mode"],
     ).to(device)
 
-    criterion = nn.CrossEntropyLoss()
+    class_weights = torch.tensor([
+        1/72, 1/71, 1/63, 1/54, 1/45, 1/44, 1/42,
+        1/42, 1/39, 1/39, 1/36, 1/31, 1/27, 1/22
+    ], device=device)
+
+    criterion = nn.CrossEntropyLoss(weight=class_weights, label_smoothing=0.1)
+
+    trainable_params = [p for p in model.parameters() if p.requires_grad]
 
     optimizer = torch.optim.AdamW(
-        filter(lambda p: p.requires_grad, model.parameters()),
+        trainable_params,
         lr=cfg["lr"],
         weight_decay=cfg["weight_decay"],
     )
 
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer,
-        mode="max",
-        factor=cfg["lr_decay_factor"],
-        patience=cfg["lr_patience"],
+        mode="max",          
+        factor=cfg["lr_decay_factor"],          
+        patience=math.ceil(cfg["patience"] // 3),          
+        threshold=cfg["weight_decay"],
         min_lr=cfg["min_lr"],
         verbose=True,
     )
@@ -137,21 +149,22 @@ def train_phase(cfg, logger):
     scaler = GradScaler(enabled=amp_enabled)
 
     log("Starting training loop...", logger)
+
     best_acc = 0.0
     patience_counter = 0
 
     for epoch in range(1, cfg["epochs"] + 1):
         current_lr = optimizer.param_groups[0]["lr"]
-        log(f"\nEpoch {epoch}/{cfg['epochs']} started | lr: {current_lr:.6f}", logger)
+        log(f"\nEpoch {epoch}/{cfg['epochs']} | lr={current_lr:.6f}", logger)
 
         model.train()
+        model.sam.eval()
+
         train_loss = 0.0
         train_acc = 0.0
 
-        train_bar = tqdm(train_loader, desc=f"Epoch {epoch} [Train]")
-
-        for batch in train_bar:
-            image = batch["image"].to(device, non_blocking=True)
+        for batch in tqdm(train_loader, desc=f"Epoch {epoch} [Train]"):
+            image = batch["seg_image"].to(device, non_blocking=True)
             label = batch["formation_label"].to(device, non_blocking=True)
 
             optimizer.zero_grad(set_to_none=True)
@@ -162,8 +175,9 @@ def train_phase(cfg, logger):
 
             scaler.scale(loss).backward()
             scaler.unscale_(optimizer)
+
             torch.nn.utils.clip_grad_norm_(
-                filter(lambda p: p.requires_grad, model.parameters()),
+                trainable_params,
                 cfg["grad_clip"],
             )
 
@@ -175,21 +189,18 @@ def train_phase(cfg, logger):
             train_loss += loss.item()
             train_acc += acc
 
-            train_bar.set_postfix(
-                loss=f"{loss.item():.4f}",
-                acc=f"{acc:.3f}",
-            )
-
         train_loss /= len(train_loader)
         train_acc /= len(train_loader)
 
         model.eval()
+        model.sam.eval()
+
         val_loss = 0.0
         val_acc = 0.0
 
         with torch.no_grad():
             for batch in tqdm(val_loader, desc=f"Epoch {epoch} [Val]"):
-                image = batch["image"].to(device)
+                image = batch["seg_image"].to(device)
                 label = batch["formation_label"].to(device)
 
                 with autocast(enabled=amp_enabled):

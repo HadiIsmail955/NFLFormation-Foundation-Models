@@ -2,9 +2,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class SAMMaskDecoder(nn.Module):
-    """
-    Trainable SAM mask decoder wrapper.
-    """
     def __init__(self, sam):
         super().__init__()
         self.mask_decoder = sam.mask_decoder

@@ -1,5 +1,7 @@
 from torchvision import transforms
 from torchvision.transforms import functional as TF
+
+
 class SegTransform:
     def __init__(self):
         self.image_transform = transforms.Compose([
@@ -10,19 +12,18 @@ class SegTransform:
             ),
         ])
 
-    def __call__(self, *args):
-        if len(args) == 2:
-            image, mask = args
-            image_tensor = self.image_transform(image)
-            mask_tensor = self._mask_to_tensor(mask)
-            return image_tensor, mask_tensor
+    def apply(self, image=None, mask=None, do_flip=False):
+        if image is not None:
+            if do_flip:
+                image = TF.hflip(image)
+            image = self.image_transform(image)
 
-        elif len(args) == 1:
-            mask = args[0]
-            return self._mask_to_tensor(mask)
+        if mask is not None:
+            if do_flip:
+                mask = TF.hflip(mask)
+            mask = self._mask_to_tensor(mask)
 
-        else:
-            raise ValueError("SegTransform expects 1 or 2 arguments")
+        return image, mask
 
     def _mask_to_tensor(self, mask):
         mask_tensor = TF.to_tensor(mask)
