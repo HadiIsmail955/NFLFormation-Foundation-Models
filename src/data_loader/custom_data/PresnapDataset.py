@@ -50,6 +50,17 @@ class PresnapDataset(Dataset):
         "heavy": 13,
     }
 
+    FLIP_MAP = {
+        "trips-left": "trips-right",
+        "trips-right": "trips-left",
+        "bunch-left": "bunch-right",
+        "bunch-right": "bunch-left",
+        "trey-left": "trey-right",
+        "trey-right": "trey-left",
+        "ace-left": "ace-right",
+        "ace-right": "ace-left",
+    }
+
     def __init__(self, data_source, coco_file, seg_transform=None, classifier_transform=None, enable_flip=False, flip_prob=0.5):
         super().__init__()
         self.data_source=data_source

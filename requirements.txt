@@ -5,3 +5,5 @@ torchvision
 segment-anything
 pyyaml
 timm
+scipy
+scikit-learn
