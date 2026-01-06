@@ -166,9 +166,10 @@ def train_phase(cfg, logger):
             formation_labels = batch["formation_label"].to(device, non_blocking=True)
             
             optimizer.zero_grad(set_to_none=True)
-
-            with autocast(device_type="cuda", enabled=amp_enabled):
+            
+            with torch.no_grad():
                 offense_mask = sam_model(x)
+            with autocast(device_type="cuda", enabled=amp_enabled):
                 outputs = model(x, offense_mask)
                 loss, loss_dict = compute_losses(
                     outputs,
