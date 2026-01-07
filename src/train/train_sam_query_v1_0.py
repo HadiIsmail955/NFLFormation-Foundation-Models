@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 from tqdm import tqdm
 from torch.utils.data import DataLoader, random_split
-from torch.cuda.amp import autocast
+from torch import autocast
 from torch.amp import GradScaler
 
 from src.data_loader.custom_data.PresnapDataset import PresnapDataset
@@ -162,13 +162,14 @@ def train_phase(cfg, logger):
         for batch in train_bar:
             x = batch["seg_image"].to(device, non_blocking=True)
             playerMasks = batch["playerMasks"]
+            offense_mask = batch["mask"].to(device)
             roles = batch["roles"]
             formation_labels = batch["formation_label"].to(device, non_blocking=True)
             
             optimizer.zero_grad(set_to_none=True)
             
-            with torch.no_grad():
-                offense_mask = sam_model(x)
+            # with torch.no_grad():
+            #     offense_mask = sam_model(x)
             with autocast(device_type="cuda", enabled=amp_enabled):
                 outputs = model(x, offense_mask)
                 loss, loss_dict = compute_losses(
@@ -218,12 +219,14 @@ def train_phase(cfg, logger):
 
         for batch in tqdm(val_loader, desc="[Val]", leave=False):
             x = batch["seg_image"].to(device, non_blocking=True)          # [B,3,H,W]
+            offense_mask = batch["mask"].to(device)
             playerMasks = batch["playerMasks"]                            # list length B
             roles = batch["roles"]                                        # list length B
             formation_labels = batch["formation_label"].to(device, non_blocking=True)  # [B]
 
-            with autocast(device_type="cuda", enabled=amp_enabled):
-                offense_mask = sam_model(x)                                   # [B,1,H,W]
+            # with torch.no_grad():
+            #     offense_mask = sam_model(x)
+            with autocast(device_type="cuda", enabled=amp_enabled):                                  # [B,1,H,W]
                 outputs = model(x, offense_mask)
                 loss, _ = compute_losses(
                     outputs,
@@ -246,8 +249,8 @@ def train_phase(cfg, logger):
             B, K, H, W = mask_logits.shape
 
             for b in range(B):
-                gt_masks = playerMasks[b].to(device)   # [G,H,W]
-                gt_roles = roles[b].to(device)         # [G]
+                gt_masks = torch.stack(playerMasks[b]).squeeze(1).to(mask_logits.device)   # [G,H,W]
+                gt_roles = torch.as_tensor(roles[b], device=role_logits.device)         # [G]
                 G = gt_masks.shape[0]
 
                 pres_tgt = torch.zeros((K,), device=device)

@@ -66,7 +66,7 @@ class SAMQuerySegmenter(nn.Module):
         self.query_decoder = QueryInstanceDecoder(
             d_model=d_model, nhead=dec_heads, num_layers=dec_layers, num_queries=num_queries
         )
-        self.mask_head = DotProductMaskHead(in_channels=self.backbone.embed_dim, d_model=d_model)
+        self.mask_head = DotProductMaskHead(in_channels=d_model, d_model=d_model)
         self.role_head = RoleHead(d_model=d_model, num_roles=num_roles)
         self.presence_head = PresenceHead(d_model=d_model)
         self.formation_head = FormationHead(d_model=d_model+2, num_formations=14)
@@ -76,7 +76,7 @@ class SAMQuerySegmenter(nn.Module):
         feat = self.backbone(x)  # expect [B, C=256, H', W']
 
         if offense_mask is not None:
-            m = offense_mask.unsqueeze(1).float()  # [B,1,H,W]
+            m = offense_mask.float()  # [B,1,H,W]
             m = F.interpolate(m, size=feat.shape[-2:], mode="nearest")     # [B,1,H',W']
             feat = feat * m
 

@@ -25,6 +25,7 @@ def main():
         "num_workers": 4,
         "sam_type": "vit_h",
         "sam_ckpt_dir": "src/model/models",
+        "ckpt_dir": "src/model/models",
         "unfreeze_last_blocks": 2,
         "epochs": 50,
         "lr": 1e-3,

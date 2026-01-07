@@ -29,3 +29,25 @@ def compute_centers_from_masks(mask_logits, H, W, eps=1e-6):
 
     centers = torch.cat([x, y], dim=-1).squeeze(2).squeeze(2)  # [B,K,2]
     return centers
+
+def visualize_instances(image_np, masks, alpha=0.5, draw_centroid=True):
+    vis = image_np.copy()
+
+    for m in masks:
+        mask = m["segmentation"]
+        color = np.array([
+            random.randint(0,255),
+            random.randint(0,255),
+            random.randint(0,255),
+        ])
+
+        vis[mask] = (
+            (1 - alpha) * vis[mask] + alpha * color
+        ).astype(np.uint8)
+
+        if draw_centroid:
+            ys, xs = np.where(mask)
+            cx, cy = int(xs.mean()), int(ys.mean())
+            cv2.circle(vis, (cx, cy), 4, (255,255,255), -1)
+
+    return vis

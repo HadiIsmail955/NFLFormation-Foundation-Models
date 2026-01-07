@@ -102,8 +102,8 @@ def compute_losses(
     total_form_loss = 0.0
 
     for b in range(B):
-        gt_masks = playerMasks[b].to(mask_logits.device)  # [G,H,W]
-        gt_roles = roles[b].to(role_logits.device)        # [G]
+        gt_masks = torch.stack(playerMasks[b]).squeeze(1).to(mask_logits.device)  # [G,H,W]
+        gt_roles = torch.as_tensor(roles[b], device=role_logits.device)       # [G]
         G = gt_masks.shape[0]
 
         pres_tgt = torch.zeros((K,), device=mask_logits.device)
