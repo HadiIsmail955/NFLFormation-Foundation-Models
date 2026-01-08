@@ -1,30 +1,15 @@
 import torch.nn as nn
 
-class SAMDecoderForClassification(nn.Module):
-    def __init__(self, sam, k_layers: int = 3, trainable: bool = True):
+
+class ClassificationHead(nn.Module):
+    def __init__(self, in_dim: int, num_classes: int, dropout: float = 0.5):
         super().__init__()
 
-        self.sam = sam
-        self.k = k_layers
-
-        self.blocks = nn.ModuleList(
-            sam.mask_decoder.transformer.layers[:k_layers]
+        self.net = nn.Sequential(
+            nn.LayerNorm(in_dim),
+            nn.Dropout(dropout),
+            nn.Linear(in_dim, num_classes),
         )
 
-        self.set_trainable(trainable)
-
-    def set_trainable(self, trainable: bool):
-        for p in self.blocks.parameters():
-            p.requires_grad = trainable
-
-    def freeze(self):
-        self.set_trainable(False)
-
-    def unfreeze(self):
-        self.set_trainable(True)
-
-    def forward(self, prompt_tokens, image_embeddings, image_pe):
-        tokens = prompt_tokens
-        for blk in self.blocks:
-            tokens, _ = blk(tokens, image_embeddings, image_pe)
-        return tokens
+    def forward(self, x):
+        return self.net(x)

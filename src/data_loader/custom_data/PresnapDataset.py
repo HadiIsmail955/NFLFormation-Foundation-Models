@@ -251,8 +251,7 @@ class PresnapDataset(Dataset):
             # cy = ys[band].float().mean()
             # centers.append((cx, cy))
 
-
-        
+        points_label = torch.ones(len(centers), dtype=torch.int64)
         bboxes = torch.tensor(bboxes, dtype=torch.float32)
         roles = torch.tensor(roles, dtype=torch.long)
         positions = torch.tensor(positions, dtype=torch.long)
@@ -274,6 +273,7 @@ class PresnapDataset(Dataset):
                 "alignments": alignments,
                 "playerMasks": playerMasks,
                 "centers": centers,
+                "points_label": points_label,
                 "center_map": center_map
             }
         
