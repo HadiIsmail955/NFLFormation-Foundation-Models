@@ -1,4 +1,8 @@
 import torch
+import numpy as np
+import cv2
+import random
+import torch.nn.functional as F
 
 def apply_mask(image, mask, mode="soft"):
 
@@ -51,3 +55,14 @@ def visualize_instances(image_np, masks, alpha=0.5, draw_centroid=True):
             cv2.circle(vis, (cx, cy), 4, (255,255,255), -1)
 
     return vis
+
+def blur_outside_sharpen_inside_mask(image, mask, strength=1.5,blur_kernel=7):
+    blur = F.avg_pool2d(
+        image,
+        kernel_size=blur_kernel,
+        stride=1,
+        padding=blur_kernel // 2,
+    )
+    sharp = image + strength * (image - blur)
+    out = sharp * mask + image * (1 - mask)
+    return out

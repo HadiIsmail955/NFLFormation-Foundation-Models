@@ -43,7 +43,7 @@ def main():
         "formation_start_epoch": 8,
         "lambda_form": 0.3,
         "lambda_role": 0.5,
-        "lambda_pres": 0.2,
+        "lambda_pres": 0.1,
         "num_queries": 11,
         "num_roles": 8,
         "dec_layers": 4,

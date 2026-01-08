@@ -32,10 +32,7 @@ def save_overlay_with_metrics(
     dy = 20
 
     lines = [
-        f"Dice: {metrics['dice']:.3f}",
-        f"IoU:  {metrics['iou']:.3f}",
-        f"Prec: {metrics['precision']:.3f}",
-        f"Rec:  {metrics['recall']:.3f}",
+        f"{key}: {value:.4f}" for key, value in metrics.items()
     ]
 
     for i, line in enumerate(lines):

@@ -1,38 +1,179 @@
-import math
-
+import numpy as np
+import cv2
 import torch
-from tqdm import tqdm
+
 from torch.utils.data import DataLoader, random_split
-from torch import autocast
-from torch.amp import GradScaler
+from ultralytics import YOLO
+from scipy import ndimage as ndi
 
 from src.data_loader.custom_data.PresnapDataset import PresnapDataset
 from src.data_loader.transformations.SAMTransformer import SegTransform
-from src.model.AutomaticMaskGenerator import AutomaticMaskGenerator
-
-from src.utils.losses import make_loss
-from src.utils.metrics import dice_iou_from_logits
 from src.data_loader.collate import presnap_collate_fn
+from src.model.AutomaticMaskGenerator import AutomaticMaskGenerator
 from src.utils.mask_applier import visualize_instances
-import matplotlib.pyplot as plt
-# from src.utils.seed import set_seed
 
 
-def log(msg, logger):
-    # print(msg)
-    logger.logger.info(msg)
+# -------------------------------------------------
+# Utility functions
+# -------------------------------------------------
+
+def log(msg, logger=None):
+    if logger is not None:
+        logger.logger.info(msg)
+    else:
+        print(msg)
 
 
-def train_phase(cfg, logger):
-    # set_seed(cfg["seed"])
-    log("Initializing training...", logger)
+def visualize_player_bboxes(image, boxes, scores=None):
+    vis = image.copy()
+    for i, box in enumerate(boxes):
+        x1, y1, x2, y2 = map(int, box)
+        cv2.rectangle(vis, (x1, y1), (x2, y2), (0, 255, 0), 3)
+        if scores is not None:
+            label = f"{scores[i]:.2f}"
+            cv2.putText(
+                vis, label, (x1, y1 - 6),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                (0, 0, 0), 2
+            )
+    return vis
+
+
+def visualize_player_centers(image, points):
+    vis = image.copy()
+    for (x, y) in points:
+        cv2.circle(vis, (int(x), int(y)), 7, (0, 255, 255), -1)
+        cv2.circle(vis, (int(x), int(y)), 11, (0, 0, 0), 2)
+    return vis
+
+
+def overlay_mask(image, mask, color=(0, 255, 0), alpha=0.35):
+    """
+    Overlay a binary mask on an RGB image.
+    """
+    overlay = image.copy()
+
+    if mask.ndim == 3:
+        mask = mask.squeeze(0)
+
+    mask = mask > 0
+
+    overlay[mask] = (
+        overlay[mask] * (1 - alpha) +
+        np.array(color) * alpha
+    ).astype(np.uint8)
+
+    return overlay
+
+
+# -------------------------------------------------
+# CORE: SIMPLE & CORRECT PLAYER CENTERS
+# -------------------------------------------------
+
+def extract_player_centers_from_mask(
+    offense_mask,
+    min_distance=100,
+):
+    """
+    Baseline, stable player center extraction using distance transform.
+    """
+
+    if offense_mask.ndim == 3:
+        offense_mask = offense_mask.squeeze(0)
+
+    mask = (offense_mask > 0).astype(np.uint8)
+
+    if mask.sum() == 0:
+        return np.empty((0, 2), dtype=np.int32), None
+
+    # Distance transform
+    distance = ndi.distance_transform_edt(mask)
+
+    # Local maxima via dilation
+    kernel = cv2.getStructuringElement(
+        cv2.MORPH_ELLIPSE, (min_distance, min_distance)
+    )
+    dilated = cv2.dilate(distance, kernel)
+
+    peaks = (distance == dilated) & (distance > 0)
+
+    coords = np.column_stack(np.where(peaks))
+    points = np.array([[c, r] for r, c in coords], dtype=np.int32)
+
+    return points, distance
+
+def blur_everything_except_mask(
+    image_np,
+    mask_np,
+    blur_ksize=31,
+    blur_sigma=0
+):
+    """
+    Blur entire image except masked region.
+    image_np: (H, W, 3) uint8
+    mask_np: (H, W) or (1, H, W), values {0,1} or {0,255}
+    """
+
+    if mask_np.ndim == 3:
+        mask_np = mask_np.squeeze(0)
+
+    # Ensure binary uint8 mask (0 or 255)
+    if mask_np.max() == 1:
+        mask = (mask_np * 255).astype(np.uint8)
+    else:
+        mask = mask_np.astype(np.uint8)
+
+    # Blur entire image
+    blurred = cv2.GaussianBlur(
+        image_np,
+        (blur_ksize, blur_ksize),
+        blur_sigma
+    )
+
+    # Invert mask
+    inv_mask = cv2.bitwise_not(mask)
+
+    # Foreground (original where mask==255)
+    fg = cv2.bitwise_and(image_np, image_np, mask=mask)
+
+    # Background (blurred where mask==0)
+    bg = cv2.bitwise_and(blurred, blurred, mask=inv_mask)
+
+    return cv2.add(fg, bg)
+
+def keep_only_mask(image_np, mask_np):
+    """
+    Keep only masked region, set everything else to black.
+
+    image_np: (H, W, 3) uint8
+    mask_np: (H, W) or (1, H, W), values {0,1} or {0,255}
+    """
+
+    if mask_np.ndim == 3:
+        mask_np = mask_np.squeeze(0)
+
+    # Ensure binary uint8 mask (0 or 255)
+    if mask_np.max() == 1:
+        mask = (mask_np * 255).astype(np.uint8)
+    else:
+        mask = mask_np.astype(np.uint8)
+
+    # Apply mask
+    return cv2.bitwise_and(image_np, image_np, mask=mask)
+
+# -------------------------------------------------
+# Main visualization pipeline
+# -------------------------------------------------
+
+def train_phase(cfg, logger=None):
+    log("Starting visualization pipeline...", logger)
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    amp_enabled = (device == "cuda")
     log(f"Using device: {device}", logger)
 
-    log("Loading dataset metadata...", logger)
-
+    # -----------------------------
+    # Dataset
+    # -----------------------------
     seg_tf = SegTransform()
 
     dataset = PresnapDataset(
@@ -40,37 +181,16 @@ def train_phase(cfg, logger):
         coco_file=cfg["train_coco_file"],
         seg_transform=seg_tf,
         classifier_transform=None,
-        enable_flip=cfg["flip_augmentation"],
-        flip_prob=cfg["flip_prob"],
-        )
-
-    log(f"Dataset loaded: {len(dataset)} samples", logger)
-
-    log("Splitting dataset into train / validation...", logger)
+        enable_flip=False,
+    )
 
     val_len = int(len(dataset) * cfg["val_split"])
     train_len = len(dataset) - val_len
 
-    train_ds, val_ds = random_split(
+    _, val_ds = random_split(
         dataset,
         [train_len, val_len],
         generator=torch.Generator().manual_seed(cfg["seed"]),
-    )
-
-    log(f"Split done -> train={train_len}, val={val_len}", logger)
-
-    log("Creating DataLoaders...", logger)
-
-    persistent = cfg["num_workers"] > 0
-
-    train_loader = DataLoader(
-        train_ds,
-        batch_size=cfg["batch_size"],
-        shuffle=True,
-        num_workers=cfg["num_workers"],
-        pin_memory=(device == "cuda"),
-        persistent_workers=persistent,
-        collate_fn=presnap_collate_fn,
     )
 
     val_loader = DataLoader(
@@ -78,61 +198,151 @@ def train_phase(cfg, logger):
         batch_size=cfg["batch_size"],
         shuffle=False,
         num_workers=cfg["num_workers"],
-        pin_memory=(device == "cuda"),
-        persistent_workers=persistent,
         collate_fn=presnap_collate_fn,
     )
 
-    log(
-        f"DataLoaders ready "
-        f"(batch_size={cfg['batch_size']}, workers={cfg['num_workers']})",
-        logger,
-    )
+    # -----------------------------
+    # SAM
+    # -----------------------------
+    log("Loading SAM AutomaticMaskGenerator...", logger)
 
-    log("Initializing model...", logger)
-
-    model = AutomaticMaskGenerator(
+    amg = AutomaticMaskGenerator(
         sam_type=cfg["sam_type"],
         ckpt_dir=cfg["ckpt_dir"],
-        unfreeze_last_blocks=cfg["unfreeze_last_blocks"],
-    ).to(device)
+        unfreeze_last_blocks=0,
+    )
+    amg.sam.to(device)
 
-    if cfg.get("continue_from_ckpt", None) is not None:
-        state = torch.load(cfg.get("continue_from_ckpt", None), map_location=device)
-        model.load_state_dict(state["model"])
-        log(
-            f"Continuing training from checkpoint: "
-            f"{cfg.get('continue_from_ckpt', None) is not None}",
-            logger,
-        )
+    # -----------------------------
+    # YOLO
+    # -----------------------------
+    log("Loading YOLOv8...", logger)
 
-    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    log(f"Model ready ({trainable_params:,} trainable parameters)", logger)
+    yolo = YOLO("yolov8x.pt")
+    yolo.to(device)
+    yolo.eval()
 
-    # assert trainable_params < 6_000_000, "Encoder accidentally unfrozen!"
-
+    # -----------------------------
+    # One sample
+    # -----------------------------
     batch = next(iter(val_loader))
 
-    # seg_image is a torch tensor [B, 3, H, W]
-    seg_image = batch["seg_image"][0]
+    image = batch["image"][0]
+    offense_mask = batch["mask"][0]
+    center = batch["center_map"][0]
 
-    image_np = (
-        seg_image
-        .permute(1, 2, 0)
-        .cpu()
-        .numpy()
+    image_np = (image.permute(1, 2, 0).cpu().numpy() * 255).astype(np.uint8)
+    offense_mask_np = offense_mask.squeeze(0).cpu().numpy()
+    center_np = center.squeeze(0).cpu().numpy()
+
+    cv2.imwrite("center_map.png",
+        cv2.cvtColor(
+            (center_np * 255).astype(np.uint8),
+            cv2.COLOR_GRAY2BGR
+        )
     )
 
-    image_np = (image_np * 255).astype(np.uint8)
 
-    masks = model.generate_masks(image_np)
+    # -----------------------------
+    # Player centers (BASELINE)
+    # -----------------------------
+    player_points, distance = extract_player_centers_from_mask(
+        offense_mask_np,
+        min_distance=20
+    )
 
-    log(f"Generated {len(masks)} masks for sample image", logger)
+    log(f"Detected {len(player_points)} player centers", logger)
 
-    vis = visualize_instances(image_np, masks)
-    vis_path = cfg.get("mask_vis_path", "mask_vis.png")
-    cv2.imwrite(vis_path, cv2.cvtColor(vis, cv2.COLOR_RGB2BGR))
-    log(f"Saved mask visualization to: {vis_path}", logger)
+    # -----------------------------
+    # Overlay mask + centers
+    # -----------------------------
+    mask_overlay = overlay_mask(
+        image_np,
+        offense_mask_np,
+        color=(0, 255, 0),
+        alpha=0.35
+    )
 
-    log(f"Training finished. Best Dice: {best_dice:.4f}", logger)
-    logger.close()
+    center_vis = visualize_player_centers(
+        mask_overlay,
+        player_points
+    )
+
+    cv2.imwrite(
+        "player_centers.png",
+        cv2.cvtColor(center_vis, cv2.COLOR_RGB2BGR)
+    )
+
+    # -----------------------------
+    # SAM masks
+    # -----------------------------
+    image_for_sam = keep_only_mask(
+        image_np,
+        offense_mask_np
+    )
+
+    masks = amg.generate_masks(image_for_sam)
+    sam_vis = visualize_instances(image_np, masks)
+
+    cv2.imwrite(
+        "sam_masks.png",
+        cv2.cvtColor(sam_vis, cv2.COLOR_RGB2BGR)
+    )
+
+    # -----------------------------
+    # YOLO boxes
+    # -----------------------------
+    with torch.no_grad():
+        results = yolo(image_np, conf=0.3, iou=0.4, verbose=False)
+
+    det = results[0]
+    if det.boxes is not None:
+        boxes = det.boxes.xyxy.cpu().numpy()
+        classes = det.boxes.cls.cpu().numpy()
+        scores = det.boxes.conf.cpu().numpy()
+        mask = classes == 0
+        person_boxes = boxes[mask]
+        person_scores = scores[mask]
+    else:
+        person_boxes = np.empty((0, 4))
+        person_scores = None
+
+    bbox_vis = visualize_player_bboxes(
+        image_np, person_boxes, person_scores
+    )
+
+    cv2.imwrite(
+        "yolo_player_bboxes.png",
+        cv2.cvtColor(bbox_vis, cv2.COLOR_RGB2BGR)
+    )
+
+    # -----------------------------
+    # Side-by-side comparison
+    # -----------------------------
+    h = min(sam_vis.shape[0], bbox_vis.shape[0], center_vis.shape[0])
+
+    def resize_keep(img):
+        return cv2.resize(
+            img, (int(img.shape[1] * h / img.shape[0]), h)
+        )
+
+    comparison = np.concatenate(
+        [
+            resize_keep(sam_vis),
+            resize_keep(bbox_vis),
+            resize_keep(center_vis),
+        ],
+        axis=1
+    )
+
+    cv2.imwrite(
+        "sam_yolo_centers.png",
+        cv2.cvtColor(comparison, cv2.COLOR_RGB2BGR)
+    )
+
+
+    log("Saved outputs:", logger)
+    log("  sam_masks.png", logger)
+    log("  yolo_player_bboxes.png", logger)
+    log("  player_centers.png", logger)
+    log("  sam_yolo_centers.png", logger)

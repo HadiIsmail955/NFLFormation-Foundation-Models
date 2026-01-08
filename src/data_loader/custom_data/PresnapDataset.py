@@ -1,4 +1,5 @@
 import os
+import math
 import json
 import torch
 import random
@@ -86,6 +87,35 @@ class PresnapDataset(Dataset):
             if img.get('attributes', {}).get('formation') in self.FORMATION_MAP
         ]
 
+    @staticmethod
+    def generate_center_heatmap(centers, H, W, sigma=3):
+        H = int(H)
+        W = int(W)
+        heatmap = torch.zeros((H, W), dtype=torch.float32)
+
+        if len(centers) == 0:
+            return heatmap
+
+        radius = int(3 * sigma)
+
+        for (cx, cy) in centers:
+            cx = int(round(float(cx)))
+            cy = int(round(float(cy)))
+
+            x0 = max(0, cx - radius)
+            x1 = min(W, cx + radius + 1)
+            y0 = max(0, cy - radius)
+            y1 = min(H, cy + radius + 1)
+
+            for y in range(y0, y1):
+                for x in range(x0, x1):
+                    heatmap[y, x] += math.exp(
+                        -((x - cx) ** 2 + (y - cy) ** 2) / (2 * sigma ** 2)
+                    )
+
+        heatmap.clamp_(0, 1)
+        return heatmap
+
     def __len__(self):
         return len(self.images)
     
@@ -94,7 +124,8 @@ class PresnapDataset(Dataset):
 
         img_entry = self.images[idx]
 
-        img_path = os.path.join(self.img_folder_path, img_entry['file_name'])
+        # img_path = os.path.join(self.img_folder_path, img_entry['file_name'])
+        img_path = os.path.join(self.seg_img_folder_path, img_entry['file_name'])
         image = Image.open(img_path).convert("RGB")
 
         seg_img_path= os.path.join(self.seg_img_folder_path, img_entry['file_name'])
@@ -127,6 +158,7 @@ class PresnapDataset(Dataset):
         positions = []
         alignments = []
         playerMasks = []
+        centers = []
 
         anns = [ann for ann in self.coco.get('annotations', []) if ann['image_id'] == img_entry['id']]
         for ann in anns:
@@ -181,14 +213,57 @@ class PresnapDataset(Dataset):
                 do_flip=do_flip,
             )
             playerMasks.append(pm)
+
+            # pm2 = pm.squeeze(0)
+            # ys, xs = torch.where(pm2 > 0)
+            # if len(xs) == 0:
+            #     continue
+            # y_min = ys.min()
+            # band = (ys <= y_min + 3)  
+            # cx = xs[band].float().mean()
+            # cy = ys[band].float().mean()
+            # centers.append((cx, cy))
+
+            pm2 = pm.squeeze(0)
+            ys, xs = torch.where(pm2 > 0)
+            if len(xs) == 0:
+                continue
+            head_percentile = 0.18  
+            k = max(1, int(len(ys) * head_percentile))
+            sorted_ys, idx = torch.sort(ys)
+            cy = sorted_ys[:k].float().mean()
+            cx = xs[idx[:k]].float().mean()
+            centers.append((cx, cy))
+
+            # pm2 = pm.squeeze(0)
+            # ys, xs = torch.where(pm2 > 0)
+            # if len(xs) == 0:
+            #     continue
+            # y_min = ys.min().float()
+            # y_max = ys.max().float()
+            # h = y_max - y_min + 1
+            # head_to_jersey_start = y_min + 0.10 * h   
+            # head_to_jersey_end   = y_min + 0.50 * h  
+            # band = (ys >= head_to_jersey_start) & (ys <= head_to_jersey_end)
+            # if band.sum() == 0:
+            #     band = ys <= (y_min + 0.25 * h)
+            # cx = xs[band].float().mean()
+            # cy = ys[band].float().mean()
+            # centers.append((cx, cy))
+
+
         
         bboxes = torch.tensor(bboxes, dtype=torch.float32)
         roles = torch.tensor(roles, dtype=torch.long)
         positions = torch.tensor(positions, dtype=torch.long)
         alignments = torch.tensor(alignments, dtype=torch.long)
-            
+        
+        H, W = mask.shape[1:]
+        center_map = self.generate_center_heatmap(centers, H, W).unsqueeze(0)
+        
+        
         return {
-                # "image": image,
+                "image": image,
                 "seg_image": seg_image,
                 "mask": mask,
                 "meta": meta,
@@ -197,6 +272,8 @@ class PresnapDataset(Dataset):
                 "roles": roles,
                 "positions": positions,
                 "alignments": alignments,
-                "playerMasks": playerMasks
+                "playerMasks": playerMasks,
+                "centers": centers,
+                "center_map": center_map
             }
         

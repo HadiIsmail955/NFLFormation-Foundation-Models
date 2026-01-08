@@ -1,12 +1,12 @@
 #!/bin/bash
 #SBATCH --job-name=sam-train
-#SBATCH --partition=gpu_mi300
+#SBATCH --partition=dev_gpu_h100
 #SBATCH --gres=gpu:1
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
-#SBATCH --time=00:05:00
+#SBATCH --time=00:30:00
 #SBATCH --output=logs/%x-%j.out
 #SBATCH --error=logs/%x-%j.err
 
@@ -26,4 +26,5 @@ export CUDA_VISIBLE_DEVICES=0
 cd $SLURM_SUBMIT_DIR
 
 # python -m script.seg_v1_0.full_experiment
-python -m script.test.test
+python -m script.seg_v2_0.full_experiment
+# python -m script.test.test

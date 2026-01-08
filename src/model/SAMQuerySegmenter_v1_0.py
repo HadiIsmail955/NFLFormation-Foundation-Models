@@ -11,7 +11,7 @@ from .decoder.query_instance_decoder import QueryInstanceDecoder
 from .head.mask_head import DotProductMaskHead
 from .head.role_head import RoleHead
 from .head.presence_head import PresenceHead
-from .head.formation_head import FormationHead
+from .head.basic_formation_head import FormationHead
 
 from src.utils.mask_applier import compute_centers_from_masks
 

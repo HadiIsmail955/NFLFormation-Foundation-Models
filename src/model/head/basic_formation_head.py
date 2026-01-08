@@ -9,8 +9,7 @@ class FormationHead(nn.Module):
             nn.GELU(),
             nn.Linear(128, 1)
         )
-
-        # final classifier
+        
         self.classifier = nn.Sequential(
             nn.Linear(d_model, 256),
             nn.GELU(),

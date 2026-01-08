@@ -7,3 +7,6 @@ pyyaml
 timm
 scipy
 scikit-learn
+matplotlib
+ultralytics 
+scikit-image
