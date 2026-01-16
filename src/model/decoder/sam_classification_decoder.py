@@ -1,30 +1,51 @@
+import torch
 import torch.nn as nn
 
+
 class SAMClassificationDecoder(nn.Module):
-    def __init__(self, sam, k_layers: int = 3, trainable: bool = True):
+    def __init__(
+        self,
+        sam,
+        k_layers: int = 3,
+        unfreeze_last_k: int = 1,
+    ):
         super().__init__()
 
         self.sam = sam
-        self.k = k_layers
+        self.k_layers = k_layers
+        self.unfreeze_last_k = unfreeze_last_k
 
         self.blocks = nn.ModuleList(
             sam.mask_decoder.transformer.layers[:k_layers]
         )
 
-        self.set_trainable(trainable)
+        self._freeze_all()
+        self._unfreeze_last_k()
 
-    def set_trainable(self, trainable: bool):
+    def _freeze_all(self):
         for p in self.blocks.parameters():
-            p.requires_grad = trainable
+            p.requires_grad = False
 
-    def freeze(self):
-        self.set_trainable(False)
+    def _unfreeze_last_k(self):
+        if self.unfreeze_last_k <= 0:
+            return
 
-    def unfreeze(self):
-        self.set_trainable(True)
+        assert self.unfreeze_last_k <= len(self.blocks), (
+            f"unfreeze_last_k={self.unfreeze_last_k} "
+            f"exceeds number of blocks={len(self.blocks)}"
+        )
 
-    def forward(self, prompt_tokens, image_embeddings, image_pe):
-        tokens = prompt_tokens
+        for blk in self.blocks[-self.unfreeze_last_k:]:
+            for p in blk.parameters():
+                p.requires_grad = True
+
+    def forward(self, queries, keys, key_pe):
         for blk in self.blocks:
-            tokens, _ = blk(tokens, image_embeddings, image_pe)
-        return tokens
+            query_pe = torch.zeros_like(queries)
+            queries, keys = blk(
+                queries=queries,
+                keys=keys,
+                query_pe=query_pe,
+                key_pe=key_pe,
+            )
+        return queries

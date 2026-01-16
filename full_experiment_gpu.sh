@@ -4,7 +4,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --gres=gpu:1
-#SBATCH --time=3:00:00
+#SBATCH --time=4:00:00
 
 #SBATCH --cpus-per-task=24
 #SBATCH --mem=160G
@@ -24,4 +24,5 @@ export PYTHONPATH=$SLURM_SUBMIT_DIR
 export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 export MKL_NUM_THREADS=$SLURM_CPUS_PER_TASK
 
-python -m script.seg_v1_0.full_experiment
+# python -m script.seg_v1_0.full_experiment
+python -m script.formation_v1_0.full_experiment

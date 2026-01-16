@@ -27,7 +27,7 @@ def main():
         "sam_type": "vit_h",
         "sam_ckpt_dir": "src/model/models",
         "unfreeze_last_blocks": 2,
-        "epochs": 50,
+        "epochs": 20,
         "lr": 1e-3,
         "weight_decay": 1e-4,
         "grad_clip": 1.0,

@@ -8,16 +8,13 @@ from torch.amp import GradScaler
 
 from src.data_loader.custom_data.PresnapDataset import PresnapDataset
 from src.data_loader.transformations.SAMTransformer import SegTransform
-from src.model.SAMFormationModel_v1_0 import SAMFormationModel
+from src.model.SAMSegmenter_v1_0 import SAMSegmenter
 
+from src.utils.losses import make_loss
 from src.utils.metrics import dice_iou_from_logits
 from src.data_loader.collate import presnap_collate_fn
 # from src.utils.seed import set_seed
 
-@torch.no_grad()
-def compute_accuracy(logits, y):
-    pred = torch.argmax(logits, dim=1)
-    return (pred == y).float().mean().item()
 
 def log(msg, logger):
     # print(msg)
@@ -92,13 +89,10 @@ def train_phase(cfg, logger):
 
     log("Initializing model...", logger)
 
-    model = SAMFormationModel(
+    model = SAMSegmenter(
         sam_type=cfg["sam_type"],
         ckpt_dir=cfg["ckpt_dir"],
         unfreeze_last_blocks=cfg["unfreeze_last_blocks"],
-        n_classes=cfg["n_classes"],
-        k_decoder_layers=cfg["k_decoder_layers"],
-        unfreeze_last_decoder_blocks=cfg.get("unfreeze_last_decoder_blocks",0),
     ).to(device)
 
     if cfg.get("continue_from_ckpt", None) is not None:
@@ -123,16 +117,16 @@ def train_phase(cfg, logger):
 
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer,
-        mode="max",  # for accuracy
-        factor=cfg["lr_decay_factor"],
-        patience=math.ceil(cfg["patience"] // 2),
+        mode="max",          
+        factor=cfg["lr_decay_factor"],          
+        patience=math.ceil(cfg["patience"] // 2),          
         threshold=cfg["threshold"],
         threshold_mode="rel",
         min_lr=cfg["min_lr"],
         verbose=True,
     )
 
-    loss_fn = torch.nn.CrossEntropyLoss()
+    loss_fn = make_loss()
 
     scaler = GradScaler(
         device="cuda",
@@ -141,7 +135,7 @@ def train_phase(cfg, logger):
 
     log("Starting training loop...", logger)
 
-    best_val_acc = 0.0
+    best_dice = 0.0
     patience_counter = 0
 
     for epoch in range(1, cfg["epochs"] + 1):
@@ -150,7 +144,6 @@ def train_phase(cfg, logger):
 
         model.train()
         train_loss = 0.0
-        train_acc = 0.0
 
         train_bar = tqdm(
             train_loader,
@@ -159,16 +152,13 @@ def train_phase(cfg, logger):
         )
 
         for batch in train_bar:
-            x = batch["seg_image"].to(device, non_blocking=True)      
-            points_xy = batch["centers"]
-            points_label = batch["points_label"] 
-            y = batch["formation_label"].to(device, non_blocking=True)
-       
+            x = batch["seg_image"].to(device, non_blocking=True)
+            y = batch["qb_seg_image"].to(device, non_blocking=True)
 
             optimizer.zero_grad(set_to_none=True)
 
             with autocast(device_type="cuda", enabled=amp_enabled):
-                logits = model(x, points_xy)
+                logits = model(x)
                 loss = loss_fn(logits, y)
 
             if not torch.isfinite(loss):
@@ -188,63 +178,69 @@ def train_phase(cfg, logger):
             scaler.update()
 
             train_loss += loss.item()
-            train_acc += compute_accuracy(logits.detach(), y)
             train_bar.set_postfix(loss=f"{loss.item():.4f}")
 
         train_loss /= len(train_loader)
-        train_acc /= len(train_loader)
 
         log("Running validation...", logger)
 
         model.eval()
-        val_loss = 0.0
-        val_acc = 0.0
+        val_loss, val_dice, val_iou = 0.0, 0.0, 0.0
 
-        val_bar = tqdm(val_loader, desc=f"Epoch {epoch}/{cfg['epochs']} [Val]", leave=False)
+        val_bar = tqdm(
+            val_loader,
+            desc=f"Epoch {epoch}/{cfg['epochs']} [Val]",
+            leave=False,
+        )
 
         with torch.no_grad():
             for batch in val_bar:
                 x = batch["seg_image"].to(device, non_blocking=True)
-                points_xy = batch["centers"]
-                y = batch["formation_label"].to(device, non_blocking=True)
+                y = batch["qb_seg_image"].to(device, non_blocking=True)
 
                 with autocast(device_type="cuda", enabled=amp_enabled):
-                    logits = model(x, points_xy)
+                    logits = model(x)
                     loss = loss_fn(logits, y)
 
+                d, i = dice_iou_from_logits(logits, y)
+
                 val_loss += loss.item()
-                val_acc += compute_accuracy(logits, y)
+                val_dice += d
+                val_iou += i
 
         val_loss /= len(val_loader)
-        val_acc /= len(val_loader)
+        val_dice /= len(val_loader)
+        val_iou /= len(val_loader)
 
         logger.log_epoch({
             "epoch": epoch,
             "lr": optimizer.param_groups[0]["lr"],
             "train_loss": train_loss,
-            "train_acc": train_acc,
             "val_loss": val_loss,
-            "val_acc": val_acc,
+            "val_dice": val_dice,
+            "val_iou": val_iou,
         })
 
         log(
             f"Epoch {epoch} summary | "
-            f"train_loss={train_loss:.6f}, train_acc={train_acc:.4f}, "
-            f"val_loss={val_loss:.6f}, val_acc={val_acc:.4f}",
+            f"train_loss={train_loss:.4f}, "
+            f"val_dice={val_dice:.4f}, "
+            f"val_iou={val_iou:.4f}",
             logger,
         )
+
         previous_lr = current_lr
-        scheduler.step(val_acc)
+        scheduler.step(val_dice)
         current_lr = optimizer.param_groups[0]["lr"]
 
-        if val_acc > best_val_acc:
-            best_val_acc = val_acc
+        if val_dice > best_dice:
+            best_dice = val_dice
             patience_counter = 0
             logger.save_checkpoint(
                 model,
                 name="best.pt",
                 epoch=epoch,
-                val_acc=best_val_acc,
+                val_dice=best_dice,
             )
             log("New best model saved", logger)
         elif current_lr < previous_lr:
@@ -256,5 +252,5 @@ def train_phase(cfg, logger):
             log("Early stopping triggered", logger)
             break
 
-    log(f"Training finished. Best val acc: {best_val_acc:.4f}", logger)
+    log(f"Training finished. Best Dice: {best_dice:.4f}", logger)
     logger.close()

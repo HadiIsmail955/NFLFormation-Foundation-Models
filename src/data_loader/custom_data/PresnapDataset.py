@@ -34,22 +34,22 @@ class PresnapDataset(Dataset):
             'WR':6
         }
 
-    FORMATION_MAP = {
-        "shotgun": 0,
-        "ace-left": 1,
-        "ace-right": 2,
-        "trips-left": 3,
-        "trips-right": 4,
-        "twins-right": 5,
-        "bunch-left": 6,
-        "bunch-right": 7,
-        "i-formation": 8,
-        "trey-left": 9,
-        "trey-right": 10,
-        "empty": 11,
-        "double-tight": 12,
-        "heavy": 13,
-    }
+    # FORMATION_MAP = {
+    #     "shotgun": 0,
+    #     "ace-left": 1,
+    #     "ace-right": 2,
+    #     "trips-left": 3,
+    #     "trips-right": 4,
+    #     "twins-right": 5,
+    #     "bunch-left": 6,
+    #     "bunch-right": 7,
+    #     "i-formation": 8,
+    #     "trey-left": 9,
+    #     "trey-right": 10,
+    #     "empty": 11,
+    #     "double-tight": 12,
+    #     "heavy": 13,
+    # }
 
     FLIP_MAP = {
         "trips-left": "trips-right",
@@ -60,6 +60,30 @@ class PresnapDataset(Dataset):
         "trey-right": "trey-left",
         "ace-left": "ace-right",
         "ace-right": "ace-left",
+    }
+
+    FORMATION_MERGE_MAP = {
+        "trips-left": "trips",
+        "trips-right": "trips",
+        "bunch-left": "bunch",
+        "bunch-right": "bunch",
+        "trey-left": "trey",
+        "trey-right": "trey",
+        "ace-left": "ace",
+        "ace-right": "ace",
+        "twins-right": "twins",
+    }
+    FORMATION_MAP = {
+        "shotgun": 0,
+        "empty": 1,
+        "i-formation": 2,
+        "double-tight": 3,
+        "heavy": 4,
+        "twins": 5,
+        "trips": 6,
+        "bunch": 7,
+        "trey": 8,
+        "ace": 9,
     }
 
     def __init__(self, data_source, coco_file, seg_transform=None, classifier_transform=None, enable_flip=False, flip_prob=0.5):
@@ -78,6 +102,19 @@ class PresnapDataset(Dataset):
         
         print(Counter(labels))
 
+        # labels = []
+        # for img in self.coco["images"]:
+        #     raw = img.get("attributes", {}).get("formation")
+        #     if raw is None:
+        #         continue
+
+        #     merged = self.FORMATION_MERGE_MAP.get(raw, raw)
+
+        #     if merged in self.FORMATION_MAP:
+        #         labels.append(merged)
+
+        # print(Counter(labels))
+
         self.img_folder_path = os.path.join(data_source,"images")
         self.seg_img_folder_path = os.path.join(data_source,"resize_images")
         self.mask_img_folder_path = os.path.join(data_source,"Team_masks","resize_off_masks")
@@ -86,6 +123,18 @@ class PresnapDataset(Dataset):
             img for img in self.coco['images']
             if img.get('attributes', {}).get('formation') in self.FORMATION_MAP
         ]
+        
+        # self.images = []
+        # for img in self.coco["images"]:
+        #     raw = img.get("attributes", {}).get("formation")
+        #     if raw is None:
+        #         continue
+
+        #     merged = self.FORMATION_MERGE_MAP.get(raw, raw)
+
+        #     if merged in self.FORMATION_MAP:
+        #         self.images.append(img)
+
 
     @staticmethod
     def generate_center_heatmap(centers, H, W, sigma=3):
@@ -149,16 +198,34 @@ class PresnapDataset(Dataset):
 
         meta=img_entry["resize_meta"]
         
-        formation_str = img_entry.get('attributes', {}).get('formation', 'unknown')
-        formation_label = self.FORMATION_MAP.get(formation_str, -1)
+        # formation_str = img_entry.get('attributes', {}).get('formation', 'unknown')
+        # formation_label = self.FORMATION_MAP.get(formation_str, -1)
+        # formation_label = torch.tensor(formation_label, dtype=torch.long)
+
+        formation_raw = img_entry.get('attributes', {}).get('formation', 'unknown')
+
+        formation_merged = self.FORMATION_MERGE_MAP.get(
+            formation_raw,
+            formation_raw
+        )
+
+        formation_label = self.FORMATION_MAP.get(formation_merged, -1)
         formation_label = torch.tensor(formation_label, dtype=torch.long)
-        
+
         bboxes = []
         roles = []
         positions = []
         alignments = []
         playerMasks = []
         centers = []
+        
+        position_masks = {
+            pos: torch.zeros_like(mask)
+            for pos in self.POSITION_MAP.values()
+        }
+        position_points = {
+            pos: [] for pos in self.POSITION_MAP.values()
+        }
 
         anns = [ann for ann in self.coco.get('annotations', []) if ann['image_id'] == img_entry['id']]
         for ann in anns:
@@ -213,6 +280,11 @@ class PresnapDataset(Dataset):
                 do_flip=do_flip,
             )
             playerMasks.append(pm)
+            pos_label = self.POSITION_MAP.get(position_str, -1)
+            if pos_label >= 0:
+                position_masks[pos_label] = torch.maximum(
+                    position_masks[pos_label], pm
+                )
 
             # pm2 = pm.squeeze(0)
             # ys, xs = torch.where(pm2 > 0)
@@ -250,7 +322,7 @@ class PresnapDataset(Dataset):
             # cx = xs[band].float().mean()
             # cy = ys[band].float().mean()
             # centers.append((cx, cy))
-
+        
         points_label = torch.ones(len(centers), dtype=torch.int64)
         bboxes = torch.tensor(bboxes, dtype=torch.float32)
         roles = torch.tensor(roles, dtype=torch.long)
@@ -260,6 +332,14 @@ class PresnapDataset(Dataset):
         H, W = mask.shape[1:]
         center_map = self.generate_center_heatmap(centers, H, W).unsqueeze(0)
         
+        pm2 = pm.squeeze(0)
+        ys, xs = torch.where(pm2 > 0)
+        if len(xs) > 0:
+            k = max(1, int(len(ys) * 0.18))
+            sorted_ys, idx = torch.sort(ys)
+            cy = sorted_ys[:k].float().mean()
+            cx = xs[idx[:k]].float().mean()
+            position_points[pos_label].append((cx, cy))
         
         return {
                 "image": image,
@@ -274,6 +354,9 @@ class PresnapDataset(Dataset):
                 "playerMasks": playerMasks,
                 "centers": centers,
                 "points_label": points_label,
-                "center_map": center_map
+                "center_map": center_map,
+                "qb_seg_image": qb_seg_image,
+                "position_masks": position_masks,
+                "position_points": position_points,
             }
         

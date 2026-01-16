@@ -1,4 +1,5 @@
 import cv2
+import torch
 import numpy as np
 from scipy import ndimage as ndi
 from skimage.feature import peak_local_max
@@ -49,3 +50,22 @@ def extract_centers(heatmap, k=11, threshold=0.3):
 
     peaks = sorted(peaks, key=lambda p: heatmap[p], reverse=True)
     return peaks[:k]
+
+def build_point_tensors(centers_list, device):
+    B = len(centers_list)
+    Nmax = max(len(c) for c in centers_list)
+
+    points_xy = torch.zeros((B, Nmax, 2), device=device)
+    points_label = torch.zeros((B, Nmax), dtype=torch.long, device=device)
+    valid_mask = torch.zeros((B, Nmax), dtype=torch.bool, device=device)
+
+    for i, centers in enumerate(centers_list):
+        if len(centers) == 0:
+            continue
+        c = torch.tensor(centers, device=device)
+        n = c.shape[0]
+        points_xy[i, :n] = c
+        points_label[i, :n] = 1
+        valid_mask[i, :n] = True
+
+    return points_xy, points_label, valid_mask

@@ -26,5 +26,7 @@ export CUDA_VISIBLE_DEVICES=0
 cd $SLURM_SUBMIT_DIR
 
 # python -m script.seg_v1_0.full_experiment
-python -m script.seg_v2_0.full_experiment
+# python -m script.seg_v2_0.full_experiment
+python -m script.seg_v3_0.full_experiment
+# python -m script.formation_v1_0.full_experiment
 # python -m script.test.test

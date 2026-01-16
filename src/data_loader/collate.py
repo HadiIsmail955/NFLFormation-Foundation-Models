@@ -5,7 +5,8 @@ FIXED_KEYS = {
     "seg_image",
     "mask",
     "formation_label",
-    "center_map"
+    "center_map",
+    "qb_seg_image"
 }
 
 def presnap_collate_fn(batch):

@@ -10,13 +10,13 @@ class SAMMaskDecoder(nn.Module):
         for p in self.mask_decoder.parameters():
             p.requires_grad = True
 
-    def forward(self, image_embeddings, sparse_emb, dense_emb, out_size):
+    def forward(self, image_embeddings, sparse_emb, dense_emb, out_size,multimask_output=False):
         low_res_masks, _ = self.mask_decoder(
             image_embeddings=image_embeddings,
             image_pe=self.prompt_encoder.get_dense_pe(),
             sparse_prompt_embeddings=sparse_emb,
             dense_prompt_embeddings=dense_emb,
-            multimask_output=False,
+            multimask_output=multimask_output,
         )
 
         return F.interpolate(
